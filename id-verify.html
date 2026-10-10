@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verify an ID Card</title>
+<link rel="stylesheet" href="css/style.css?v=4">
+<link rel="stylesheet" href="css/dashboard.css?v=13">
+<style>
+  .id-verify-page { min-height:100vh; padding:32px 20px; display:flex; justify-content:center; background:var(--bg,#f6f7f9); }
+  .id-verify-wrap { max-width:620px; width:100%; }
+  .id-verify-card { overflow:hidden; }
+  .id-verify-header { padding:24px; background:var(--navy); color:#fff; text-align:center; }
+  .id-verify-logo { width:58px; height:58px; margin:0 auto 10px; border-radius:14px; background:#fff; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  .id-verify-logo img { width:100%; height:100%; object-fit:contain; }
+  .id-verify-logo-fallback { color:var(--navy); font-weight:800; }
+  .id-verify-badge { display:inline-block; margin-top:8px; padding:5px 12px; border-radius:999px; background:rgba(255,255,255,.12); font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; }
+  .id-verify-body { padding:24px; background:#fff; }
+  .id-verify-person { display:flex; gap:18px; align-items:center; margin-bottom:22px; }
+  .id-verify-photo { width:92px; height:92px; flex:0 0 92px; border-radius:50%; object-fit:cover; border:4px solid #fff; box-shadow:0 3px 14px rgba(0,0,0,.12); background:#eef1f5; }
+  .id-verify-initials { display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:800; color:var(--navy); }
+  .id-verify-name { margin:0; color:var(--navy); font-size:25px; line-height:1.15; }
+  .id-verify-role { margin-top:5px; color:var(--text-muted); font-size:14px; font-weight:700; }
+  .id-verify-status { display:flex; align-items:center; gap:8px; padding:11px 13px; margin-bottom:18px; border-radius:8px; background:#edf7ef; color:#256333; font-size:13px; font-weight:700; }
+  .id-verify-dot { width:9px; height:9px; border-radius:50%; background:#3c8a4d; }
+  .id-verify-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .id-verify-item { padding:12px; border:1px solid var(--border-soft); border-radius:8px; }
+  .id-verify-item.full { grid-column:1/-1; }
+  .id-verify-label { font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); font-weight:800; margin-bottom:4px; }
+  .id-verify-value { color:var(--navy); font-size:14px; font-weight:600; line-height:1.4; }
+  .id-verify-footer { padding:14px 24px; text-align:center; border-top:1px solid var(--border-soft); background:#fafbfc; color:var(--text-muted); font-size:11px; }
+  .id-verify-lookup { margin-bottom:16px; }
+  @media(max-width:520px) { .id-verify-grid{grid-template-columns:1fr}.id-verify-item.full{grid-column:auto}.id-verify-person{align-items:flex-start}.id-verify-name{font-size:21px}.id-verify-body{padding:18px}.id-verify-header{padding:20px} }
+</style>
+</head>
+<body>
+<div class="id-verify-page">
+  <div class="id-verify-wrap">
+    <div id="lookup-card" class="auth-card id-verify-lookup">
+      <p class="eyebrow">ID card verification</p>
+      <h1 style="margin:4px 0 6px;">Verify an ID Card</h1>
+      <p class="subtitle">Scan the QR code on a school ID card, or enter its verification token below.</p>
+      <div class="field"><label for="code-input">Verification token</label><input id="code-input" type="text" placeholder="Paste the token here"></div>
+      <button class="btn-primary" onclick="lookupIdCard()">Verify ID Card</button>
+      <div id="error-banner" class="error-banner"></div>
+    </div>
+    <div id="result-output"></div>
+    <div class="powered-by"><span>Official school ID verification</span></div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script>
+function showError(message) {
+  const el = document.getElementById('error-banner');
+  el.textContent = message;
+  el.classList.add('visible');
+}
+function clearError() {
+  const el = document.getElementById('error-banner');
+  el.textContent = '';
+  el.classList.remove('visible');
+}
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+}
+function initials(name) {
+  const parts = String(name || '?').trim().split(/\s+/).filter(Boolean);
+  return (parts[0]?.[0] || '?') + (parts[1]?.[0] || '');
+}
+function item(label, value, full=false) {
+  if (!value) return '';
+  return `<div class="id-verify-item${full ? ' full' : ''}"><div class="id-verify-label">${escapeHtml(label)}</div><div class="id-verify-value">${escapeHtml(value)}</div></div>`;
+}
+async function lookupIdCard() {
+  clearError();
+  const raw = document.getElementById('code-input').value.trim();
+  if (!raw) { showError('Enter an ID card verification token first.'); return; }
+
+  document.getElementById('result-output').innerHTML = `<div class="auth-card"><div class="empty-state">Verifying ID card...</div></div>`;
+  const { data, error } = await supabaseClient.rpc('get_id_card_by_token', { p_token: raw });
+  if (error) {
+    document.getElementById('result-output').innerHTML = '';
+    if (error.code === '42883' || /function.*does not exist/i.test(error.message)) {
+      showError('The ID card verification system has not been installed on this database yet. Run the ID card verification migration supplied with this update.');
+    } else if (/invalid input syntax for type uuid/i.test(error.message)) {
+      showError('That is not a valid ID card verification token.');
+    } else {
+      showError('Unable to verify this ID card right now.');
+    }
+    return;
+  }
+  if (!data || !data.length) {
+    document.getElementById('result-output').innerHTML = '';
+    showError('This ID card could not be verified. The card may be invalid, inactive, or no longer registered by the school.');
+    return;
+  }
+
+  const r = data[0];
+  const photo = r.photo_url
+    ? `<img class="id-verify-photo" src="${escapeHtml(r.photo_url)}" alt="${escapeHtml(r.name)}">`
+    : `<div class="id-verify-photo id-verify-initials">${escapeHtml(initials(r.name))}</div>`;
+  const logo = r.school_logo_url
+    ? `<img src="${escapeHtml(r.school_logo_url)}" alt="School logo">`
+    : `<div class="id-verify-logo-fallback">${escapeHtml(initials(r.school_name))}</div>`;
+
+  document.getElementById('result-output').innerHTML = `
+    <div class="auth-card id-verify-card">
+      <div class="id-verify-header">
+        <div class="id-verify-logo">${logo}</div>
+        <div style="font-size:17px;font-weight:800;">${escapeHtml(r.school_name || 'School')}</div>
+        ${r.school_address ? `<div style="font-size:11px;opacity:.8;margin-top:4px;">${escapeHtml(r.school_address)}</div>` : ''}
+        <div class="id-verify-badge">Verified ${escapeHtml(r.role_label || 'Identity Card')}</div>
+      </div>
+      <div class="id-verify-body">
+        <div class="id-verify-status"><span class="id-verify-dot"></span> This ID card is registered with the school.</div>
+        <div class="id-verify-person">${photo}<div><h2 class="id-verify-name">${escapeHtml(r.name)}</h2><div class="id-verify-role">${escapeHtml(r.role_label)}</div></div></div>
+        <div class="id-verify-grid">
+          ${item(r.entity_type === 'student' ? 'Admission No.' : 'ID Type', r.identity_number || (r.entity_type === 'teacher' ? 'Teacher ID' : 'School ID'))}
+          ${item('Class', r.class_name)}
+          ${item('Employment', r.employment_type)}
+          ${item('Form Master', r.form_master)}
+          ${item('Sex', r.sex)}
+          ${item('Phone', r.phone)}
+          ${item('Email', r.email)}
+        </div>
+      </div>
+      <div class="id-verify-footer">Identity verified from the school's ID card registry.</div>
+    </div>
+  `;
+  document.getElementById('lookup-card').style.display = 'none';
+}
+(function() {
+  const token = new URLSearchParams(window.location.search).get('token');
+  if (token) {
+    document.getElementById('code-input').value = token;
+    lookupIdCard();
+  }
+})();
+</script>
+</body>
+</html>

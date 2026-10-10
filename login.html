@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign in — Results Workspace</title>
+<link rel="stylesheet" href="css/style.css?v=4">
+</head>
+<body>
+  <div class="auth-page">
+    <div class="auth-card">
+      <div id="school-brand-logo" class="school-brand-logo"></div>
+      <p class="eyebrow">Welcome back</p>
+      <h1>Sign in</h1>
+      <p class="subtitle">Enter your details to get to your school's results workspace.</p>
+
+      <div id="error-banner" class="error-banner"></div>
+
+      <form id="login-form">
+        <div class="field">
+          <label for="email">Email</label>
+          <input type="email" id="email" placeholder="you@school.edu.ng" required>
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input type="password" id="password" placeholder="Your password" required>
+        </div>
+        <button type="submit" id="submit-btn" class="btn-primary">Sign in</button>
+      </form>
+
+      <p class="form-footer">New school? <a href="register.html">Create a workspace</a></p>
+      <p class="form-footer"><a href="forgot-password.html">Forgot password?</a></p>
+      <p class="form-footer"><a href="parent-login.html">Are you a parent? Sign in here</a></p>
+      <div class="powered-by-footer">
+        <img src="assets/logo.webp?v=1" alt="Royal-Marjeesti Hub">
+        <span>Powered by Royal-Marjeesti Hub</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js?v=2"></script>
+  <script src="js/auth.js?v=6"></script>
+  <script>
+    document.getElementById('login-form').addEventListener('submit', handleLogin);
+    loadSchoolBrandingLogo();
+  </script>
+</body>
+</html>

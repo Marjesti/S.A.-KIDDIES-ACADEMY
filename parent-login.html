@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Parent Login</title>
+<link rel="stylesheet" href="css/style.css?v=4">
+<link rel="stylesheet" href="css/dashboard.css?v=12">
+<style>
+  .verify-page { min-height: 100vh; padding: 32px 20px; display: flex; justify-content: center; }
+  .verify-card { max-width: 520px; width: 100%; }
+  .verify-card .auth-card { padding: 28px 24px; }
+  .report-wrap { max-width: 720px; width: 100%; margin: 20px auto 0; }
+  .report-table-scroll { overflow-x: auto; }
+  .download-pdf-btn { margin-top: 14px; }
+
+  @media print {
+    @page { size: A4; margin: 14mm; }
+    * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color-adjust: exact !important;
+    }
+    body { background: #fff !important; }
+    .verify-page { padding: 0; min-height: auto; display: block; }
+    .lookup-card, .download-pdf-btn { display: none !important; }
+    .report-wrap { max-width: 100%; margin: 0; }
+  }
+  .powered-by {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-soft);
+  }
+  .powered-by img { height: 22px; width: auto; }
+  .powered-by span { font-size: 12px; color: var(--text-muted); }
+</style>
+</head>
+<body>
+  <div class="verify-page" style="flex-direction: column; align-items: center;">
+    <div class="verify-card lookup-card">
+      <div class="auth-card">
+        <p class="eyebrow">Parent login</p>
+        <h1 style="margin:4px 0 6px;">View your child's result</h1>
+        <p class="subtitle">Sign in with the email and PIN the school gave you.</p>
+
+        <div class="field">
+          <label for="parent-email">Email address</label>
+          <input type="email" id="parent-email" placeholder="e.g. parent@example.com">
+        </div>
+        <div class="field">
+          <label for="parent-pin">PIN</label>
+          <input type="text" id="parent-pin" inputmode="numeric" placeholder="6-digit PIN">
+        </div>
+        <button class="btn-primary" onclick="parentLogin()">Sign in</button>
+
+        <div id="error-banner" class="error-banner"></div>
+      </div>
+    </div>
+
+    <div id="result-output" class="report-wrap"></div>
+
+    <div class="powered-by" style="max-width:520px; width:100%;">
+      <img id="parent-logo-img" src="assets/logo.webp" alt="Royal-Marjeesti Hub">
+      <script>document.getElementById("parent-logo-img").src += "?cb=" + Date.now();</script>
+      <span>Powered by Royal-Marjeesti Hub</span>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script>
+    function showError(message) {
+      const el = document.getElementById('error-banner');
+      el.textContent = message;
+      el.classList.add('visible');
+    }
+    function clearError() {
+      const el = document.getElementById('error-banner');
+      el.textContent = '';
+      el.classList.remove('visible');
+    }
+
+    function ordinal(n) {
+      if (n === null || n === undefined) return '--';
+      const s = ['th', 'st', 'nd', 'rd'];
+      const v = n % 100;
+      return n + (s[(v - 20) % 10] || s[v] || s[0]);
+    }
+
+    async function parentLogin() {
+      clearError();
+      document.getElementById('result-output').innerHTML = '';
+      const email = document.getElementById('parent-email').value.trim();
+      const pin = document.getElementById('parent-pin').value.trim();
+      if (!email || !pin) { showError('Enter both your email address and PIN.'); return; }
+
+      const { data, error } = await supabaseClient.rpc('parent_login', { p_email: email, p_pin: pin });
+
+      if (error) {
+        if (error.code === '42883' || /function.*does not exist/i.test(error.message)) {
+          showError('Parent login isn\'t set up yet on this database. Ask the school admin to check this.');
+        } else {
+          showError('Something went wrong signing in: ' + error.message);
+        }
+        return;
+      }
+
+      if (!data || !data.length) {
+        showError('Incorrect email or PIN, or no published result yet for this term. Please check with the school if this continues.');
+        return;
+      }
+
+      const behaviorRow = (label, val) => `<tr><td>${label}</td><td style="text-align:center;">${val ?? '--'}</td></tr>`;
+
+      // Group the flat row list into one set of rows per child
+      const byStudent = {};
+      const order = [];
+      data.forEach((r) => {
+        if (!byStudent[r.student_id]) { byStudent[r.student_id] = []; order.push(r.student_id); }
+        byStudent[r.student_id].push(r);
+      });
+
+      const cardsHtml = order.map((sid) => {
+        const subjectRows = byStudent[sid];
+        const first = subjectRows[0];
+        const rowsHtml = subjectRows.map((r) => `
+          <tr>
+            <td>${r.subject_name}</td>
+            <td style="text-align:center;">${r.ca_score ?? '--'}</td>
+            <td style="text-align:center;">${r.exam_score ?? '--'}</td>
+            <td style="text-align:center;">${r.total_score ?? '--'}</td>
+            <td style="text-align:center;">${r.grade || '--'}</td>
+            <td style="text-align:center;">${ordinal(r.subject_position)}</td>
+            <td style="text-align:center;">${r.subject_highest ?? '--'}</td>
+            <td style="text-align:center;">${r.subject_lowest ?? '--'}</td>
+          </tr>
+        `).join('');
+
+        return `
+        <div class="report-card" style="box-shadow:none; border:1px solid var(--border-soft);">
+          <div class="report-header">
+            <div class="report-logo">${first.school_logo_url ? `<img src="${first.school_logo_url}${first.school_logo_url.includes('?') ? '&' : '?'}cb=${Date.now()}" alt="logo">` : ''}</div>
+            <div class="report-header-text">
+              <h1>${first.school_name || 'School Name'}</h1>
+              ${first.school_address ? `<p class="report-address">ADDRESS: ${first.school_address}</p>` : ''}
+              ${first.school_phone ? `<p class="report-phone">Tel.: ${first.school_phone}</p>` : ''}
+            </div>
+          </div>
+          <h2 class="report-title">REPORT SHEET</h2>
+          <div class="report-meta">
+            <span><strong>NAME:</strong> ${first.student_name}</span>
+            <span><strong>CLASS:</strong> ${first.class_name || 'Unassigned'}</span>
+            <span><strong>POSITION:</strong> ${ordinal(first.overall_position)}</span>
+            <span><strong>TERM:</strong> ${first.year_label} &middot; ${first.term}</span>
+          </div>
+
+          <div class="report-table-scroll">
+            <table class="report-table">
+              <thead>
+                <tr>
+                  <th>SUBJECT</th><th>C.A</th><th>EXAM</th><th>TOTAL</th><th>GRADE</th>
+                  <th>POSITION</th><th>HIGHEST</th><th>LOWEST</th>
+                </tr>
+              </thead>
+              <tbody>${rowsHtml}</tbody>
+            </table>
+          </div>
+
+          <div class="report-footer-grid">
+            <div class="report-panel">
+              <p class="report-panel-title">BEHAVIOUR</p>
+              <table class="behavior-table">
+                ${behaviorRow('Punctuality', first.punctuality)}
+                ${behaviorRow('Attendance', first.attendance_rating)}
+                ${behaviorRow('Neatness', first.neatness)}
+                ${behaviorRow('Handwriting', first.handwriting)}
+                ${behaviorRow('Politeness', first.politeness)}
+                ${behaviorRow('Initiative', first.initiative)}
+                ${behaviorRow('Attitude to school', first.attitude_to_school)}
+              </table>
+              <p class="report-keys">Keys: Excellent = 5, V.Good = 4, Good = 3, Average = 2, Poor = 1</p>
+            </div>
+
+            <div class="report-panel">
+              <p class="report-panel-title">GRADE SYSTEM</p>
+              <table class="behavior-table">
+                <tr><td>90 - 100</td><td>A+</td></tr>
+                <tr><td>80 - 89</td><td>A</td></tr>
+                <tr><td>75 - 79</td><td>B2</td></tr>
+                <tr><td>70 - 74</td><td>B3</td></tr>
+                <tr><td>65 - 69</td><td>C4</td></tr>
+                <tr><td>60 - 64</td><td>C5</td></tr>
+                <tr><td>50 - 59</td><td>C6</td></tr>
+                <tr><td>40 - 49</td><td>D7</td></tr>
+                <tr><td>30 - 39</td><td>E8</td></tr>
+                <tr><td>0 - 29</td><td>F9</td></tr>
+              </table>
+            </div>
+
+            <div class="report-panel">
+              <p class="report-panel-title">SUMMARY</p>
+              <table class="behavior-table">
+                <tr><td>G. Total</td><td>${first.g_total ?? '--'}</td></tr>
+                <tr><td>Average</td><td>${first.student_average ? Number(first.student_average).toFixed(1) + '%' : '--'}</td></tr>
+                <tr><td>Highest avg. in class</td><td>${first.class_highest_avg ? Number(first.class_highest_avg).toFixed(1) + '%' : '--'}</td></tr>
+                <tr><td>Lowest avg. in class</td><td>${first.class_lowest_avg ? Number(first.class_lowest_avg).toFixed(1) + '%' : '--'}</td></tr>
+              </table>
+              <p class="report-panel-title" style="margin-top:12px;">ATTENDANCE</p>
+              <table class="behavior-table">
+                <tr><td>Days opened</td><td>${first.days_opened ?? '--'}</td></tr>
+                <tr><td>Days present</td><td>${first.days_present ?? '--'}</td></tr>
+                <tr><td>Days absent</td><td>${first.days_absent ?? '--'}</td></tr>
+              </table>
+            </div>
+          </div>
+
+          <div class="report-remarks">
+            <p><strong>Headteacher/Principal's remarks:</strong> ${first.headteacher_remark || 'Not yet recorded.'}</p>
+            <p><strong>Teacher's remark:</strong> ${first.teacher_remark || 'Not yet recorded.'}</p>
+          </div>
+        </div>`;
+      }).join('<div style="height:20px;"></div>');
+
+      document.getElementById('result-output').innerHTML = `
+        ${cardsHtml}
+        <button class="btn-primary download-pdf-btn" onclick="window.print()">Download as PDF</button>
+      `;
+    }
+  </script>
+</body>
+</html>

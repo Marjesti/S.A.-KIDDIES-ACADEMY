@@ -1,0 +1,12 @@
+ID CARD UPDATE — TEACHER DETAILS
+
+Run db/schema_id_card_verification.sql in Supabase after installing this update.
+
+This migration:
+- adds teachers.sex and teachers.phone if they do not already exist;
+- keeps the existing student/teacher QR tokens;
+- changes public ID-card verification to show Form Master, Sex and Phone;
+- removes Classes Taught and Subjects Taught from ID-card verification;
+- keeps session/term out of the physical ID cards.
+
+The Teachers admin form now lets the school enter/edit Sex and Phone.

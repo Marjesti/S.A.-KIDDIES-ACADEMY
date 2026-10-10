@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Teacher dashboard</title>
+<link rel="stylesheet" href="css/style.css?v=4">
+<link rel="stylesheet" href="css/dashboard.css?v=12">
+<style>
+  .teacher-topbar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 18px 24px; background: var(--navy); color: #fff;
+  }
+  .teacher-topbar .school-line { font-size: 13px; color: #C9D0E0; }
+  .teacher-topbar button {
+    background: none; border: 1px solid rgba(255,255,255,0.3); color: #fff;
+    padding: 8px 14px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px;
+  }
+  .teacher-body { max-width: 760px; margin: 0 auto; padding: 24px 18px 60px; }
+
+  .my-timetable-panel { border-left:4px solid var(--gold); }
+  .my-tt-badge { display:inline-flex; align-items:center; padding:6px 10px; border-radius:999px; background:var(--gold-soft); color:var(--navy); font-size:12px; font-weight:700; white-space:nowrap; }
+  .my-tt-grid { display:grid; gap:14px; }
+  .my-tt-day { border:1px solid #E3E7EF; border-radius:12px; overflow:hidden; background:#fff; }
+  .my-tt-day-title { padding:10px 12px; background:#F5F7FA; color:var(--navy); font-size:13px; font-weight:800; }
+  .my-tt-row { display:grid; grid-template-columns:96px 1fr; border-top:1px solid #EEF1F5; min-height:54px; }
+  .my-tt-time { padding:9px 10px; border-right:1px solid #EEF1F5; display:flex; flex-direction:column; justify-content:center; gap:2px; }
+  .my-tt-time strong { font-size:12px; color:var(--navy); }
+  .my-tt-time span, .my-tt-lesson span { font-size:11.5px; color:#667085; }
+  .my-tt-lesson { padding:9px 11px; display:flex; flex-direction:column; justify-content:center; gap:2px; }
+  .my-tt-lesson strong { font-size:13px; color:var(--navy); }
+  .my-tt-free { font-style:italic; color:#98A2B3 !important; }
+  @media (max-width:520px) {
+    .my-tt-row { grid-template-columns:82px 1fr; }
+    .my-tt-time { padding:8px 7px; }
+    .my-tt-lesson { padding:8px 9px; }
+  }
+</style>
+</head>
+<body>
+  <div class="teacher-app-shell" id="teacher-app-shell">
+    <div class="teacher-sidebar-overlay" id="teacher-sidebar-overlay"></div>
+    <aside class="teacher-sidebar" id="teacher-sidebar">
+      <div class="teacher-sidebar-header">
+        <div class="teacher-sidebar-logo" id="teacher-sidebar-logo">SA</div>
+        <div>
+          <div class="teacher-sidebar-school" id="teacher-sidebar-school">S.A. Kiddies Academy</div>
+          <div class="teacher-sidebar-role">Teacher Portal</div>
+        </div>
+      </div>
+      <div class="teacher-menu-label">MY WORKSPACE</div>
+      <nav class="teacher-nav" id="teacher-nav" aria-label="Teacher menu"></nav>
+      <div class="teacher-sidebar-footer">
+        <button type="button" id="teacher-signout-btn">Sign out</button>
+      </div>
+    </aside>
+    <main class="teacher-main">
+      <header class="teacher-topbar">
+        <div class="teacher-topbar-left">
+          <button type="button" class="teacher-menu-toggle" id="teacher-menu-toggle" aria-label="Open teacher menu" aria-expanded="false">
+            <span></span><span></span><span></span>
+          </button>
+          <div>
+            <div class="teacher-page-title teacher-name-heading" id="teacher-name">Loading...</div>
+            <div class="school-line" id="school-name"></div>
+          </div>
+        </div>
+      </header>
+      <div class="teacher-body" id="page-body"></div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js?v=4"></script>
+  <script src="js/layout.js?v=15"></script>
+  <script src="js/teacher-dashboard.js?v=22"></script>
+</body></body>
+</html>
