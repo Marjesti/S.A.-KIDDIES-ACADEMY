@@ -1,0 +1,160 @@
+/* ===========================================================
+   Design tokens — taken from the reference screenshots
+   =========================================================== */
+:root {
+  --cream:        #F5F1EA;
+  --cream-card:   #FFFFFF;
+  --navy:         #1B2942;
+  --navy-soft:    #2A3B5C;
+  --gold:         #E8A93E;
+  --gold-soft:    #F6E3BC;
+  --text-dark:    #16213A;
+  --text-muted:   #6B7280;
+  --border-soft:  #E6E1D6;
+  --radius-lg:    20px;
+  --radius-md:    14px;
+  --radius-sm:    10px;
+  --shadow-card:  0 1px 2px rgba(22, 33, 58, 0.04), 0 8px 24px rgba(22, 33, 58, 0.06);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--cream);
+  color: var(--text-dark);
+  overflow-x: hidden;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* ---- Auth pages (login / register) ---- */
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--cream-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 36px 32px;
+}
+
+.school-brand-logo {
+  min-height: 24px;
+  margin-bottom: 16px;
+}
+
+.school-brand-logo-img {
+  height: 44px;
+  width: auto;
+  max-width: 220px;
+  object-fit: contain;
+}
+
+.powered-by-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.powered-by-footer img { height: 20px; width: auto; }
+.powered-by-footer span { font-size: 11.5px; color: var(--text-muted); }
+
+.auth-card h1 {
+  font-size: 26px;
+  margin: 0 0 6px;
+}
+
+.auth-card p.subtitle {
+  color: var(--text-muted);
+  margin: 0 0 28px;
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+
+.field {
+  margin-bottom: 16px;
+}
+
+.field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--text-dark);
+}
+
+.field input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-soft);
+  background: #FBFAF7;
+  font-size: 15px;
+  color: var(--text-dark);
+}
+
+.field input:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-soft);
+}
+
+.btn-primary {
+  width: 100%;
+  padding: 13px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--navy);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 8px;
+}
+
+.btn-primary:hover { background: var(--navy-soft); }
+.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.form-footer {
+  margin-top: 20px;
+  font-size: 14px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.form-footer a {
+  color: var(--navy);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.error-banner {
+  background: #FBEAEA;
+  color: #A33A3A;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 13.5px;
+  margin-bottom: 16px;
+  display: none;
+}
+
+.error-banner.visible { display: block; }
