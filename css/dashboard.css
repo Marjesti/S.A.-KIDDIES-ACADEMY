@@ -935,8 +935,8 @@
 
 /* Official school seal on report cards */
 .report-official-stamp{display:flex;justify-content:center;align-items:center;margin:4px auto 2px;page-break-inside:avoid;}
-.report-official-stamp img{display:block;width:76px;height:76px;object-fit:contain;background:transparent;}
-@media print{.report-official-stamp{break-inside:avoid;page-break-inside:avoid}.report-official-stamp img{width:62px;height:62px}}
+.report-official-stamp img{display:block;width:76px;height:76px;object-fit:contain;background:transparent;transform:rotate(-6deg);opacity:.92;filter:saturate(.92);}
+@media print{.report-official-stamp{break-inside:avoid;page-break-inside:avoid}.report-official-stamp img{width:62px;height:62px;transform:rotate(-6deg)}}
 
 
 /* Optional school signature URL, displayed immediately above the official stamp. */

@@ -64,7 +64,13 @@ async function loadMarkBook() {
   formMasterClassId = teacher.form_master_class_id;
   formMasterClassName = teacher.classes?.name || 'Your class';
   const section = teacher.classes?.section || null;
-  if (String(section || '').trim().toLowerCase().includes('primary')) {
+  const sectionKey = String(section || '').trim().toLowerCase();
+  const isEarlyYears = sectionKey.includes('pre-nursery') || sectionKey.includes('prenursery') || sectionKey.includes('nursery') || sectionKey.includes('playgroup') || sectionKey === 'nur';
+  if (isEarlyYears) {
+    ca1Max = 20;
+    ca2Max = 20;
+    examMax = 60;
+  } else if (sectionKey.includes('primary')) {
     ca1Max = primaryCa1Max;
     ca2Max = primaryCa2Max;
     examMax = primaryExamMax;

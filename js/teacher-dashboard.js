@@ -6,6 +6,8 @@ let myStudents = [];
 let myOwnResults = [];
 let formMasterPendingResults = [];
 let editingResultId = null;
+// Remember the selected teacher workspace when the dashboard re-renders after an action.
+let teacherActiveWorkspace = 'teacher-assignments';
 let ca1Max = 15;
 let ca2Max = 15;
 let examMax = 70;
@@ -17,7 +19,13 @@ function isPrimarySection(section) {
   return String(section || '').trim().toLowerCase().includes('primary');
 }
 
+function isEarlyYearsSection(section) {
+  const value = String(section || '').trim().toLowerCase();
+  return value.includes('pre-nursery') || value.includes('prenursery') || value.includes('nursery') || value.includes('playgroup') || value === 'nur';
+}
+
 function assessmentConfigForSection(section) {
+  if (isEarlyYearsSection(section)) return { ca1: 20, ca2: 20, exam: 60 };
   return isPrimarySection(section)
     ? { ca1: primaryCa1Max, ca2: primaryCa2Max, exam: primaryExamMax }
     : { ca1: ca1Max, ca2: ca2Max, exam: 70 };
@@ -98,6 +106,7 @@ function setupTeacherMenu() {
     link.addEventListener('click', (event) => {
       const targetId = link.dataset.scrollTarget;
       event.preventDefault();
+      teacherActiveWorkspace = targetId;
 
       // The hamburger is the sole navigation. Show ONLY the selected workspace.
       document.querySelectorAll('.teacher-dashboard-section, #student-management-panel').forEach(section => {
@@ -614,9 +623,18 @@ function renderDashboard() {
 
   // Open the result-entry workspace when editing, rather than hiding the form
   // behind the dashboard's single-workspace navigation.
-  const workspaceToShow = editingResultId ? 'teacher-submit-results' : 'teacher-assignments';
+  // Keep the teacher in the workspace they were using after adding, editing,
+  // approving, or refreshing results instead of sending them back to Dashboard.
+  const requestedWorkspace = editingResultId ? 'teacher-submit-results' : teacherActiveWorkspace;
+  const workspaceToShow = document.getElementById(requestedWorkspace)
+    ? requestedWorkspace
+    : 'teacher-assignments';
+  teacherActiveWorkspace = workspaceToShow;
   document.querySelectorAll('.teacher-dashboard-section').forEach(section => {
     section.style.display = section.id === workspaceToShow ? '' : 'none';
+  });
+  document.querySelectorAll('#teacher-nav a[data-menu-key]').forEach(link => {
+    link.classList.toggle('active', link.dataset.scrollTarget === workspaceToShow);
   });
   document.getElementById('student-management-panel')?.remove();
 }
@@ -712,6 +730,7 @@ function startEditResult(id) {
   const r = myOwnResults.find((x) => x.id === id);
   if (!r) return;
   editingResultId = id;
+  teacherActiveWorkspace = 'teacher-submit-results';
   renderDashboard();
 
   // Pre-fill after the form renders
@@ -738,6 +757,7 @@ function startEditResult(id) {
 
 function cancelEditResult() {
   editingResultId = null;
+  teacherActiveWorkspace = 'teacher-submit-results';
   renderDashboard();
 }
 

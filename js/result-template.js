@@ -33,7 +33,7 @@ async function loadResultTemplatePage() {
   currentSchoolId = profile.school_id;
 
   const [{ data: school }, { data: session }, { data: classes }] = await Promise.all([
-    supabaseClient.from('schools').select('name, address, phone, logo_url, principal_signature_url, headteacher_signature_url').eq('id', currentSchoolId).single(),
+    supabaseClient.from('schools').select('name, address, phone, logo_url, stamp_url, principal_signature_url, headteacher_signature_url').eq('id', currentSchoolId).single(),
     supabaseClient.from('academic_sessions').select('id, year_label, term').eq('school_id', currentSchoolId).eq('is_active', true).maybeSingle(),
     supabaseClient.from('classes').select('id, name, section').eq('school_id', currentSchoolId).order('name'),
   ]);
@@ -297,7 +297,7 @@ function reportCardHtml(student, stats, token, verifyUrl) {
         const signatoryLabel = isPrimary ? 'Headteacher' : 'Principal';
         return signatureUrl ? `<div class="report-signature-url"><img src="${escapeAttribute(signatureUrl)}" alt="${signatoryLabel} signature"><div class="signature-line"></div><strong>${signatoryLabel}</strong></div>` : '';
       })()}
-      <div class="report-official-stamp"><img src="assets/sak-original-stamp.png" alt="S.A. Kiddies Academy original verification stamp"></div>
+      <div class="report-official-stamp"><img src="${escapeAttribute(schoolInfo.stamp_url || 'assets/sak-original-stamp.png')}" alt="S.A. Kiddies Academy official stamp"></div>
     </div>
   `;
 }

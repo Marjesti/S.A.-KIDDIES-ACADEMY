@@ -9,7 +9,7 @@ async function loadSchoolSetupPage() {
 
   const { data: school } = await supabaseClient
     .from('schools')
-    .select('name, address, phone, logo_url, principal_signature_url, headteacher_signature_url, form_master_student_edit_enabled')
+    .select('name, address, phone, logo_url, stamp_url, principal_signature_url, headteacher_signature_url, form_master_student_edit_enabled')
     .eq('id', currentSchoolId)
     .single();
 
@@ -42,6 +42,12 @@ function renderSchoolSetupBody(school) {
       <div class="field">
         <label for="school-logo">Logo URL (optional)</label>
         <input type="text" id="school-logo" value="${school.logo_url || ''}" placeholder="https://..." ${isAdmin ? '' : 'disabled'}>
+      </div>
+      <div class="field">
+        <label for="school-stamp-url">Official stamp image URL (optional)</label>
+        <input type="url" id="school-stamp-url" value="${escapeSetupAttribute(school.stamp_url || '')}" placeholder="https://.../school-stamp.png" ${isAdmin ? '' : 'disabled'}>
+        <small class="text-muted">Paste a direct image URL (preferably a transparent PNG). The stamp will appear slightly tilted on printed report cards for a more natural stamped look. Leave blank to use the built-in school stamp.</small>
+        ${school.stamp_url ? `<div style="margin-top:10px;"><img src="${escapeSetupAttribute(school.stamp_url)}" alt="Stamp preview" style="width:86px;height:86px;object-fit:contain;transform:rotate(-6deg);opacity:.92;"></div>` : ''}
       </div>
       <div class="form-grid">
         <div class="field">
@@ -96,11 +102,13 @@ async function saveSchoolSetup() {
   const address = document.getElementById('school-address').value.trim();
   const phone = document.getElementById('school-phone').value.trim();
   const logoUrl = document.getElementById('school-logo').value.trim();
+  const stampUrl = document.getElementById('school-stamp-url').value.trim();
   const principalSignatureUrl = document.getElementById('principal-signature-url').value.trim();
   const headteacherSignatureUrl = document.getElementById('headteacher-signature-url').value.trim();
 
   const { error } = await supabaseClient.from('schools').update({
     name, address: address || null, phone: phone || null, logo_url: logoUrl || null,
+    stamp_url: stampUrl || null,
     principal_signature_url: principalSignatureUrl || null,
     headteacher_signature_url: headteacherSignatureUrl || null,
   }).eq('id', currentSchoolId);
@@ -148,3 +156,8 @@ async function toggleFormMasterStudentEditing(enabled) {
 }
 
 loadSchoolSetupPage();
+
+
+function escapeSetupAttribute(value) {
+  return String(value || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;');
+}

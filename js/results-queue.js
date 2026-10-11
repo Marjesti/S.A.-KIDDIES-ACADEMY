@@ -17,7 +17,13 @@ function isPrimarySection(section) {
   return String(section || '').trim().toLowerCase().includes('primary');
 }
 
+function isEarlyYearsSection(section) {
+  const value = String(section || '').trim().toLowerCase();
+  return value.includes('pre-nursery') || value.includes('prenursery') || value.includes('nursery') || value.includes('playgroup') || value === 'nur';
+}
+
 function assessmentConfigForSection(section) {
+  if (isEarlyYearsSection(section)) return { ca1: 20, ca2: 20, exam: 60 };
   return isPrimarySection(section)
     ? { ca1: primaryCa1Max, ca2: primaryCa2Max, exam: primaryExamMax }
     : { ca1: ca1Max, ca2: ca2Max, exam: 70 };
