@@ -518,6 +518,28 @@ async function reloadTeacherStudents() {
   myStudents = data || [];
 }
 
+function renderTeacherInlineEditForm() {
+  const classFilterOptions = myClasses.map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
+  const subjectOptions = renderSubjectOptionsForSection('');
+  return `
+    <div class="panel" id="teacher-inline-result-edit" style="border-left:4px solid var(--gold); margin-bottom:18px;">
+      <p class="eyebrow">Edit result</p>
+      <h3 class="panel-title">Update result</h3>
+      <div class="form-grid">
+        <div class="field"><label for="result-class">Class</label><select id="result-class" onchange="onResultClassChange()"><option value="">Select a class first</option>${classFilterOptions}</select></div>
+        <div class="field"><label for="result-student">Student</label><select id="result-student"><option value="">Select a class first</option></select></div>
+        <div class="field"><label for="result-subject">Subject</label><select id="result-subject">${subjectOptions}</select></div>
+        <div class="field"><label for="result-ca1">CA1 score</label><input type="number" id="result-ca1" min="0"></div>
+        <div class="field"><label for="result-ca2">CA2 score</label><input type="number" id="result-ca2" min="0"></div>
+        <div class="field"><label for="result-exam">Exam score</label><input type="number" id="result-exam" min="0"></div>
+      </div>
+      <button class="btn-gold" onclick="submitResult()">Save changes</button>
+      <button class="btn-outline" onclick="cancelEditResult()">Cancel</button>
+      <div id="form-error" class="error-banner"></div>
+      <div id="form-success" class="error-banner" style="background:#E8F3EA; color:#3A7D44;"></div>
+    </div>`;
+}
+
 function renderDashboard() {
   const subjectTags = mySubjects.length
     ? [...SECTIONS, 'Unassigned section'].map((section) => {
@@ -573,10 +595,10 @@ function renderDashboard() {
     ${teacherRecord.form_master_class_id ? renderFormMasterNotesPanel() : ''}
 
     ${activeSession ? `
-    <div class="panel teacher-dashboard-section" id="teacher-submit-results">
+    <div class="panel teacher-dashboard-section" id="teacher-submit-results" ${editingResultId ? 'style="display:none;"' : ''}>
       <p class="eyebrow">${activeSession.year_label} &middot; ${activeSession.term}</p>
-      <h3 class="panel-title">${editingResultId ? 'Update result' : 'Submit a result'}</h3>
-      ${mySubjects.length && myClasses.length ? `
+      <h3 class="panel-title">Submit a result</h3>
+      ${!editingResultId && mySubjects.length && myClasses.length ? `
         <div class="form-grid">
           <div class="field">
             <label for="result-class">Class</label>
@@ -616,6 +638,7 @@ function renderDashboard() {
     <div class="panel teacher-dashboard-section" id="teacher-my-submissions">
       <p class="eyebrow">Your submissions</p>
       <h3 class="panel-title">Results you've entered</h3>
+      ${editingResultId ? renderTeacherInlineEditForm() : ''}
       ${renderMyResultsTable()}
     </div>
     ` : `<div class="panel"><div class="empty-state">No active academic session right now.</div></div>`}
@@ -625,7 +648,7 @@ function renderDashboard() {
   // behind the dashboard's single-workspace navigation.
   // Keep the teacher in the workspace they were using after adding, editing,
   // approving, or refreshing results instead of sending them back to Dashboard.
-  const requestedWorkspace = editingResultId ? 'teacher-submit-results' : teacherActiveWorkspace;
+  const requestedWorkspace = editingResultId ? 'teacher-my-submissions' : teacherActiveWorkspace;
   const workspaceToShow = document.getElementById(requestedWorkspace)
     ? requestedWorkspace
     : 'teacher-assignments';
@@ -730,7 +753,7 @@ function startEditResult(id) {
   const r = myOwnResults.find((x) => x.id === id);
   if (!r) return;
   editingResultId = id;
-  teacherActiveWorkspace = 'teacher-submit-results';
+  teacherActiveWorkspace = 'teacher-my-submissions';
   renderDashboard();
 
   // Pre-fill after the form renders
@@ -757,7 +780,7 @@ function startEditResult(id) {
 
 function cancelEditResult() {
   editingResultId = null;
-  teacherActiveWorkspace = 'teacher-submit-results';
+  teacherActiveWorkspace = 'teacher-my-submissions';
   renderDashboard();
 }
 
@@ -812,6 +835,7 @@ async function submitResult() {
   okEl.classList.add('visible');
   const wasEditing = !!editingResultId;
   editingResultId = null;
+  if (wasEditing) teacherActiveWorkspace = 'teacher-my-submissions';
   await refreshMyResults();
   showSuccessToast(wasEditing ? 'Result updated' : 'Result submitted for approval');
 }
