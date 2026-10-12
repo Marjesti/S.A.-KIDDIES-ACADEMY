@@ -11,6 +11,11 @@ let teacherActiveWorkspace = 'teacher-assignments';
 let ca1Max = 15;
 let ca2Max = 15;
 let examMax = 70;
+// Preserve the result-entry context across successful submissions and dashboard re-renders.
+let resultEntrySelection = { classId: '', subjectId: '' };
+let resultEntryExistingByStudent = new Set();
+let resultEntryLookupError = false;
+let resultEntryLookupKey = '';
 let primaryCa1Max = 20;
 let primaryCa2Max = 20;
 let primaryExamMax = 60;
@@ -608,12 +613,12 @@ function renderDashboard() {
             </select>
           </div>
           <div class="field">
-            <label for="result-student">Student</label>
-            <select id="result-student"><option value="">Select a class first</option></select>
+            <label for="result-student">Student (result not yet entered)</label>
+            <select id="result-student" onchange="clearResultEntryMessages(); updateResultSubmitButton()"><option value="">Select a class first</option></select>
           </div>
           <div class="field">
             <label for="result-subject">Subject</label>
-            <select id="result-subject">${subjectOptions}</select>
+            <select id="result-subject" onchange="onResultSubjectChange()">${subjectOptions}</select>
           </div>
           <div class="field">
             <label for="result-ca1">CA1 score</label>
@@ -628,7 +633,8 @@ function renderDashboard() {
             <input type="number" id="result-exam" min="0">
           </div>
         </div>
-        <button class="btn-gold" onclick="submitResult()">${editingResultId ? 'Save changes' : 'Submit for approval'}</button>
+        <div id="result-entry-progress" class="text-muted" style="font-size:13px; margin:12px 0 14px;">Choose a class and subject to see entry progress.</div>
+        <button class="btn-gold" id="submit-result-button" ${editingResultId ? '' : 'disabled'} onclick="submitResult()">${editingResultId ? 'Save changes' : 'Submit for approval'}</button>
         ${editingResultId ? `<button class="btn-outline" onclick="cancelEditResult()">Cancel</button>` : ''}
         <div id="form-error" class="error-banner"></div>
         <div id="form-success" class="error-banner" style="background:#E8F3EA; color:#3A7D44;"></div>
@@ -660,6 +666,9 @@ function renderDashboard() {
     link.classList.toggle('active', link.dataset.scrollTarget === workspaceToShow);
   });
   document.getElementById('student-management-panel')?.remove();
+  if (!editingResultId && document.getElementById('result-class')) {
+    setTimeout(restoreResultEntryContext, 0);
+  }
 }
 
 function renderMyResultsTable() {
@@ -718,35 +727,145 @@ function renderFormMasterApprovalPanel() {
     </div>`;
 }
 
+function updateResultSubmitButton() {
+  const button = document.getElementById('submit-result-button');
+  const studentId = document.getElementById('result-student')?.value;
+  if (button && !editingResultId) button.disabled = !studentId || resultEntryLookupError;
+}
+
+function clearResultEntryMessages() {
+  document.getElementById('form-error')?.classList.remove('visible');
+  document.getElementById('form-success')?.classList.remove('visible');
+}
+
+function restoreResultEntryContext() {
+  const classSelect = document.getElementById('result-class');
+  const subjectSelect = document.getElementById('result-subject');
+  if (!classSelect || !subjectSelect) return;
+  if (resultEntrySelection.classId && myClasses.some(c => String(c.id) === String(resultEntrySelection.classId))) {
+    classSelect.value = String(resultEntrySelection.classId);
+  }
+  if (classSelect.value) {
+    // Populate section-appropriate subjects first, then restore the chosen subject.
+    updateAssessmentLabelsForClass(classSelect.value);
+    const section = myClasses.find(c => String(c.id) === String(classSelect.value))?.section || '';
+    subjectSelect.innerHTML = renderSubjectOptionsForSection(section);
+    if (resultEntrySelection.subjectId && [...subjectSelect.options].some(o => o.value === String(resultEntrySelection.subjectId))) {
+      subjectSelect.value = String(resultEntrySelection.subjectId);
+    }
+    loadEligibleResultStudents();
+  } else {
+    document.getElementById('result-student').innerHTML = '<option value="">Select a class first</option>';
+    updateResultEntryProgress([], new Set());
+  }
+}
+
+function updateAssessmentLabelsForClass(classId) {
+  const selectedClass = myClasses.find(c => String(c.id) === String(classId));
+  const config = assessmentConfigForSection(selectedClass?.section || '');
+  ca1Max = config.ca1; ca2Max = config.ca2; examMax = config.exam;
+  const ca1Label = document.querySelector('label[for="result-ca1"]');
+  const ca2Label = document.querySelector('label[for="result-ca2"]');
+  const examLabel = document.querySelector('label[for="result-exam"]');
+  if (ca1Label) ca1Label.textContent = `CA1 score (out of ${ca1Max})`;
+  if (ca2Label) ca2Label.textContent = `CA2 score (out of ${ca2Max})`;
+  if (examLabel) examLabel.textContent = `Exam score (out of ${examMax})`;
+  document.getElementById('result-ca1')?.setAttribute('max', ca1Max);
+  document.getElementById('result-ca2')?.setAttribute('max', ca2Max);
+  document.getElementById('result-exam')?.setAttribute('max', examMax);
+}
+
 function onResultClassChange() {
   const classId = document.getElementById('result-class').value;
+  resultEntrySelection.classId = classId;
+  resultEntrySelection.subjectId = '';
+  resultEntryExistingByStudent = new Set();
+  resultEntryLookupError = false;
+  resultEntryLookupKey = '';
   const studentSelect = document.getElementById('result-student');
   const subjectSelect = document.getElementById('result-subject');
   if (!classId) {
     studentSelect.innerHTML = '<option value="">Select a class first</option>';
     subjectSelect.innerHTML = renderSubjectOptionsForSection('');
+    updateResultEntryProgress([], new Set());
     return;
   }
-
-  const selectedClass = myClasses.find((c) => String(c.id) === String(classId));
-  const section = selectedClass?.section || '';
-  const config = assessmentConfigForSection(section);
-  ca1Max = config.ca1; ca2Max = config.ca2; examMax = config.exam;
-  const ca1Label = document.querySelector("label[for=\"result-ca1\"]");
-  const ca2Label = document.querySelector("label[for=\"result-ca2\"]");
-  const examLabel = document.querySelector("label[for=\"result-exam\"]");
-  if (ca1Label) ca1Label.textContent = `CA1 score (out of ${ca1Max})`;
-  if (ca2Label) ca2Label.textContent = `CA2 score (out of ${ca2Max})`;
-  if (examLabel) examLabel.textContent = `Exam score (out of ${examMax})`;
-  document.getElementById("result-ca1")?.setAttribute("max", ca1Max);
-  document.getElementById("result-ca2")?.setAttribute("max", ca2Max);
-  document.getElementById("result-exam")?.setAttribute("max", examMax);
+  updateAssessmentLabelsForClass(classId);
+  const section = myClasses.find(c => String(c.id) === String(classId))?.section || '';
   subjectSelect.innerHTML = renderSubjectOptionsForSection(section);
+  resultEntrySelection.subjectId = subjectSelect.value || '';
+  loadEligibleResultStudents();
+}
 
-  const inClass = myStudents.filter((s) => String(s.classes?.id) === String(classId));
-  studentSelect.innerHTML = inClass.length
-    ? inClass.map((s) => `<option value="${s.id}">${s.name}</option>`).join('')
-    : '<option value="">No students in this class</option>';
+function onResultSubjectChange() {
+  resultEntrySelection.subjectId = document.getElementById('result-subject')?.value || '';
+  resultEntryExistingByStudent = new Set();
+  resultEntryLookupError = false;
+  resultEntryLookupKey = '';
+  clearResultEntryMessages();
+  loadEligibleResultStudents();
+}
+
+function updateResultEntryProgress(classStudents, existingIds) {
+  const progress = document.getElementById('result-entry-progress');
+  if (!progress) return;
+  const total = classStudents.length;
+  const entered = classStudents.filter(student => existingIds.has(String(student.id))).length;
+  const remaining = Math.max(0, total - entered);
+  const percent = total ? Math.round((entered / total) * 100) : 0;
+  progress.innerHTML = `<strong>Progress:</strong> ${entered} of ${total} results entered · ${remaining} remaining (${percent}%).`;
+}
+
+async function loadEligibleResultStudents() {
+  const classId = document.getElementById('result-class')?.value || '';
+  const subjectId = document.getElementById('result-subject')?.value || '';
+  const studentSelect = document.getElementById('result-student');
+  if (!studentSelect) return;
+  resultEntrySelection = { classId, subjectId };
+  if (!classId || !subjectId || !activeSession?.id) {
+    studentSelect.innerHTML = '<option value="">Choose class and subject first</option>';
+    updateResultEntryProgress([], new Set());
+    return;
+  }
+  const classStudents = myStudents.filter(s => String(s.classes?.id) === String(classId));
+  if (!classStudents.length) {
+    resultEntryLookupError = false;
+    resultEntryExistingByStudent = new Set();
+    studentSelect.innerHTML = '<option value="">No students are registered in this class</option>';
+    studentSelect.disabled = false;
+    updateResultEntryProgress([], new Set());
+    updateResultSubmitButton();
+    return;
+  }
+  studentSelect.disabled = true;
+  studentSelect.innerHTML = '<option value="">Checking existing results…</option>';
+  const lookupKey = `${activeSession.id}|${classId}|${subjectId}`;
+  resultEntryLookupKey = lookupKey;
+  const { data, error } = await supabaseClient.from('results')
+    .select('student_id')
+    .eq('session_id', activeSession.id)
+    .eq('subject_id', subjectId)
+    .in('student_id', classStudents.map(s => s.id));
+  // Ignore a late response if the teacher changed class/subject while it was loading.
+  if (resultEntryLookupKey !== lookupKey || document.getElementById('result-class')?.value !== classId || document.getElementById('result-subject')?.value !== subjectId) return;
+  studentSelect.disabled = false;
+  if (error) {
+    resultEntryLookupError = true;
+    studentSelect.innerHTML = '<option value="">Could not check existing results</option>';
+    const errEl = document.getElementById('form-error');
+    if (errEl) { errEl.textContent = 'Could not check existing results safely. Please refresh or try again; no student list has been assumed complete.'; errEl.classList.add('visible'); }
+    updateResultEntryProgress(classStudents, new Set());
+    updateResultSubmitButton();
+    return;
+  }
+  resultEntryLookupError = false;
+  resultEntryExistingByStudent = new Set((data || []).map(r => String(r.student_id)));
+  updateResultEntryProgress(classStudents, resultEntryExistingByStudent);
+  const eligible = classStudents.filter(s => !resultEntryExistingByStudent.has(String(s.id)));
+  studentSelect.innerHTML = eligible.length
+    ? `<option value="">Select a student (${eligible.length} remaining)</option>` + eligible.map(s => `<option value="${s.id}">${teacherEsc(s.name)}</option>`).join('')
+    : '<option value="">All students have results for this subject</option>';
+  updateResultSubmitButton();
 }
 
 function startEditResult(id) {
@@ -834,8 +953,18 @@ async function submitResult() {
   okEl.textContent = editingResultId ? 'Updated.' : 'Submitted for approval.';
   okEl.classList.add('visible');
   const wasEditing = !!editingResultId;
+  const savedClassId = document.getElementById('result-class')?.value || resultEntrySelection.classId;
+  const savedSubjectId = document.getElementById('result-subject')?.value || resultEntrySelection.subjectId;
   editingResultId = null;
-  if (wasEditing) teacherActiveWorkspace = 'teacher-my-submissions';
+  if (wasEditing) {
+    teacherActiveWorkspace = 'teacher-my-submissions';
+  } else {
+    resultEntrySelection = { classId: savedClassId, subjectId: savedSubjectId };
+    // Clear marks for the next student while retaining class/subject/session/term.
+    ['result-ca1', 'result-ca2', 'result-exam'].forEach(id => { const input = document.getElementById(id); if (input) input.value = ''; });
+    const submitButton = document.getElementById('submit-result-button');
+    if (submitButton) submitButton.disabled = true;
+  }
   await refreshMyResults();
   showSuccessToast(wasEditing ? 'Result updated' : 'Result submitted for approval');
 }
