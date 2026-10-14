@@ -14,6 +14,8 @@ let examMax = 70;
 // Preserve the result-entry context across successful submissions and dashboard re-renders.
 let resultEntrySelection = { classId: '', subjectId: '' };
 let resultEntryExistingByStudent = new Set();
+let resultEntryPartialByStudent = new Map();
+let resultEntryExistingRecordId = null;
 let resultEntryLookupError = false;
 let resultEntryLookupKey = '';
 let primaryCa1Max = 20;
@@ -279,7 +281,13 @@ async function refreshMyResults() {
     .eq('session_id', activeSession.id)
     .eq('submitted_by', currentUserId)
     .order('id', { ascending: false });
-  myOwnResults = mine || [];
+  myOwnResults = (mine || []).sort((a, b) => {
+    const classCompare = String(a.students?.classes?.name || '').localeCompare(String(b.students?.classes?.name || ''), undefined, { numeric: true, sensitivity: 'base' });
+    if (classCompare) return classCompare;
+    const studentCompare = String(a.students?.name || '').localeCompare(String(b.students?.name || ''), undefined, { numeric: true, sensitivity: 'base' });
+    if (studentCompare) return studentCompare;
+    return String(a.subjects?.name || '').localeCompare(String(b.subjects?.name || ''), undefined, { numeric: true, sensitivity: 'base' });
+  });
 
   // Only relevant if this teacher is a form master: pending results across
   // the WHOLE class, for them to approve before admin publishes.
@@ -613,8 +621,8 @@ function renderDashboard() {
             </select>
           </div>
           <div class="field">
-            <label for="result-student">Student (result not yet entered)</label>
-            <select id="result-student" onchange="clearResultEntryMessages(); updateResultSubmitButton()"><option value="">Select a class first</option></select>
+            <label for="result-student">Student</label>
+            <select id="result-student" onchange="onResultStudentChange()"><option value="">Select a class first</option></select>
           </div>
           <div class="field">
             <label for="result-subject">Subject</label>
@@ -673,34 +681,46 @@ function renderDashboard() {
 
 function renderMyResultsTable() {
   if (!myOwnResults.length) return `<div class="empty-state">You haven't submitted any results yet.</div>`;
-
-  const rows = myOwnResults.map((r) => {
-    const isOwnFormMasterClass = teacherRecord.form_master_class_id
-      && r.students?.classes?.id === teacherRecord.form_master_class_id;
-
-    const actions = (r.status === 'pending' || r.status === 'approved')
-      ? `<button class="icon-btn" style="color: var(--navy); margin-right:10px;" onclick="startEditResult(${r.id})">Edit</button>${
-          (r.status === 'pending' && isOwnFormMasterClass) ? `<button class="icon-btn" style="color: var(--navy);" onclick="approveAsFormMaster(${r.id})">Approve</button>` : ''
-        }`
-      : '';
-
-    return `
-    <tr>
-      <td>${r.students?.name || ''}</td>
-      <td class="text-muted">${r.students?.classes?.name || ''}</td>
-      <td>${r.subjects?.name || ''}</td>
-      <td class="text-muted">CA1: ${r.ca1_score ?? '--'} &middot; CA2: ${r.ca2_score ?? '--'} &middot; Exam: ${r.exam_score ?? '--'}</td>
-      <td>${r.total_score ?? '--'} (${r.grade || '--'})</td>
-      <td>${r.status === 'pending' ? '<span class="text-muted">Pending</span>' : r.status === 'approved' ? '<span style="color:#8A6D1D; font-weight:600;">Approved</span>' : '<span style="color:#3A7D44; font-weight:600;">Published</span>'}</td>
-      <td>${actions}</td>
-    </tr>`;
+  const classMap = new Map();
+  myOwnResults.forEach((r) => {
+    const classId = String(r.students?.classes?.id ?? 'unassigned');
+    const className = r.students?.classes?.name || 'Unassigned';
+    if (!classMap.has(classId)) classMap.set(classId, { name: className, results: [] });
+    classMap.get(classId).results.push(r);
+  });
+  return [...classMap.entries()].sort((a,b) => a[1].name.localeCompare(b[1].name)).map(([classId, group]) => {
+    const subjectMap = new Map();
+    group.results.forEach(r => {
+      const subject = r.subjects?.name || 'Unassigned subject';
+      if (!subjectMap.has(subject)) subjectMap.set(subject, []);
+      subjectMap.get(subject).push(r);
+    });
+    const subjects = [...subjectMap.entries()].sort((a,b) => a[0].localeCompare(b[0]));
+    const navId = `teacher-subject-${String(classId).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+    const subjectHtml = subjects.map(([subject, records], index) => {
+      const rows = records.sort((a,b) => (a.students?.name || '').localeCompare(b.students?.name || '')).map(r => {
+        const isOwnFormMasterClass = teacherRecord?.form_master_class_id && r.students?.classes?.id === teacherRecord.form_master_class_id;
+        const actions = (r.status === 'pending' || r.status === 'approved')
+          ? `<button class="icon-btn" onclick="startEditResult(${r.id})">Edit</button>${r.status === 'pending' && isOwnFormMasterClass ? ` <button class="icon-btn" onclick="approveAsFormMaster(${r.id})">Approve</button>` : ''}` : '<span class="text-muted">—</span>';
+        const status = r.status === 'pending' ? 'Pending' : r.status === 'approved' ? 'Approved' : 'Published';
+        return `<tr><th scope="row" class="markbook-student">${teacherEsc(r.students?.name || 'Unknown student')}</th><td>${r.ca1_score ?? '—'}</td><td>${r.ca2_score ?? '—'}</td><td>${r.exam_score ?? '—'}</td><td><span class="markbook-total">${r.total_score ?? '—'} (${teacherEsc(r.grade || '—')})</span></td><td><span class="markbook-status">${status}</span></td><td><div class="markbook-actions">${actions}</div></td></tr>`;
+      }).join('');
+      return `<section class="markbook-subject-panel" data-markbook-index="${index}" style="${index ? 'display:none;' : ''}"><h4 class="markbook-class-title">${teacherEsc(subject)}</h4><div class="markbook-scroll" tabindex="0" aria-label="${teacherEsc(group.name)} ${teacherEsc(subject)} submissions"><table class="data-table markbook-table markbook-record-table"><thead><tr><th class="markbook-student markbook-head">Name</th><th>CA1</th><th>CA2</th><th>Exams</th><th>Total (Grade)</th><th>Status</th><th>Action</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+    }).join('');
+    return `<section class="markbook-class-group markbook-subject-stack" id="${navId}"><div class="markbook-group-heading"><h4 class="markbook-class-title">${teacherEsc(group.name)}</h4><div class="markbook-subject-nav"><button class="btn-outline" onclick="moveMarkbookSubject('${navId}',-1)" aria-label="Previous subject">‹ Previous</button><span class="markbook-subject-count">1 / ${subjects.length}</span><button class="btn-outline" onclick="moveMarkbookSubject('${navId}',1)" aria-label="Next subject">Next ›</button></div></div><div class="markbook-subject-panels">${subjectHtml}</div></section>`;
   }).join('');
+}
 
-  return `
-    <div class="data-table-wrap"><table class="data-table">
-      <thead><tr><th>Student</th><th>Class</th><th>Subject</th><th>CA/Exam</th><th>Total</th><th>Status</th><th></th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table></div>`;
+function moveMarkbookSubject(groupId, direction) {
+  const group = document.getElementById(groupId);
+  if (!group) return;
+  const panels = [...group.querySelectorAll(':scope > .markbook-subject-panels > .markbook-subject-panel')];
+  if (!panels.length) return;
+  const current = Math.max(0, panels.findIndex(panel => panel.style.display !== 'none'));
+  const next = (current + direction + panels.length) % panels.length;
+  panels.forEach((panel, index) => { panel.style.display = index === next ? '' : 'none'; });
+  const count = group.querySelector('.markbook-subject-count');
+  if (count) count.textContent = `${next + 1} / ${panels.length}`;
 }
 
 function renderFormMasterApprovalPanel() {
@@ -780,8 +800,11 @@ function onResultClassChange() {
   resultEntrySelection.classId = classId;
   resultEntrySelection.subjectId = '';
   resultEntryExistingByStudent = new Set();
+  resultEntryPartialByStudent = new Map();
+  resultEntryExistingRecordId = null;
   resultEntryLookupError = false;
   resultEntryLookupKey = '';
+  ['result-ca1', 'result-ca2', 'result-exam'].forEach(id => { const input = document.getElementById(id); if (input) input.value = ''; });
   const studentSelect = document.getElementById('result-student');
   const subjectSelect = document.getElementById('result-subject');
   if (!classId) {
@@ -800,9 +823,12 @@ function onResultClassChange() {
 function onResultSubjectChange() {
   resultEntrySelection.subjectId = document.getElementById('result-subject')?.value || '';
   resultEntryExistingByStudent = new Set();
+  resultEntryPartialByStudent = new Map();
+  resultEntryExistingRecordId = null;
   resultEntryLookupError = false;
   resultEntryLookupKey = '';
   clearResultEntryMessages();
+  ['result-ca1', 'result-ca2', 'result-exam'].forEach(id => { const input = document.getElementById(id); if (input) input.value = ''; });
   loadEligibleResultStudents();
 }
 
@@ -842,7 +868,7 @@ async function loadEligibleResultStudents() {
   const lookupKey = `${activeSession.id}|${classId}|${subjectId}`;
   resultEntryLookupKey = lookupKey;
   const { data, error } = await supabaseClient.from('results')
-    .select('student_id')
+    .select('id, student_id, ca1_score, ca2_score, exam_score, status')
     .eq('session_id', activeSession.id)
     .eq('subject_id', subjectId)
     .in('student_id', classStudents.map(s => s.id));
@@ -859,12 +885,41 @@ async function loadEligibleResultStudents() {
     return;
   }
   resultEntryLookupError = false;
+  const rowsByStudent = new Map((data || []).map(r => [String(r.student_id), r]));
   resultEntryExistingByStudent = new Set((data || []).map(r => String(r.student_id)));
+  // A student with a partial, editable result must remain selectable for CA2 or the exam.
+  // Published results stay locked and are not offered for normal sequential entry.
+  resultEntryPartialByStudent = new Map((data || [])
+    .filter(r => r.status !== 'published' && (r.ca1_score == null || r.ca2_score == null || r.exam_score == null))
+    .map(r => [String(r.student_id), r]));
   updateResultEntryProgress(classStudents, resultEntryExistingByStudent);
-  const eligible = classStudents.filter(s => !resultEntryExistingByStudent.has(String(s.id)));
+  const eligible = classStudents.filter(student => {
+    const existing = rowsByStudent.get(String(student.id));
+    return !existing || resultEntryPartialByStudent.has(String(student.id));
+  });
   studentSelect.innerHTML = eligible.length
-    ? `<option value="">Select a student (${eligible.length} remaining)</option>` + eligible.map(s => `<option value="${s.id}">${teacherEsc(s.name)}</option>`).join('')
-    : '<option value="">All students have results for this subject</option>';
+    ? `<option value="">Select a student (${eligible.length} available)</option>` + eligible.map(student => {
+        const existing = resultEntryPartialByStudent.get(String(student.id));
+        return `<option value="${student.id}">${teacherEsc(student.name)}</option>`;
+      }).join('')
+    : '<option value="">All students have complete results for this subject</option>';
+  updateResultSubmitButton();
+}
+
+function onResultStudentChange() {
+  clearResultEntryMessages();
+  const studentId = document.getElementById('result-student')?.value || '';
+  const existing = resultEntryPartialByStudent.get(String(studentId));
+  resultEntryExistingRecordId = existing?.id ?? null;
+  // Pre-fill previously saved components so adding CA2 does not erase CA1.
+  const ca1 = document.getElementById('result-ca1');
+  const ca2 = document.getElementById('result-ca2');
+  const exam = document.getElementById('result-exam');
+  if (ca1) ca1.value = existing?.ca1_score ?? '';
+  if (ca2) ca2.value = existing?.ca2_score ?? '';
+  if (exam) exam.value = existing?.exam_score ?? '';
+  const button = document.getElementById('submit-result-button');
+  if (button && !editingResultId) button.textContent = existing ? 'Save result progress' : 'Submit for approval';
   updateResultSubmitButton();
 }
 
@@ -933,8 +988,9 @@ async function submitResult() {
     ca1_score: ca1Score, ca2_score: ca2Score, exam_score: examScore, grade: gradeFor(total),
   };
 
-  const query = editingResultId
-    ? supabaseClient.from('results').update(payload).eq('id', editingResultId)
+  const updateRecordId = editingResultId || resultEntryExistingRecordId;
+  const query = updateRecordId
+    ? supabaseClient.from('results').update(payload).eq('id', updateRecordId)
     : supabaseClient.from('results').insert({
         school_id: currentSchoolId, student_id: studentId, subject_id: subjectId,
         session_id: activeSession.id, status: 'pending', submitted_by: currentUserId, ...payload,
@@ -944,7 +1000,7 @@ async function submitResult() {
 
   if (error) {
     errEl.textContent = error.code === '23505'
-      ? 'This student already has a result for this subject in this term.'
+      ? 'A result already exists for this student and subject. Select the student again to continue an incomplete result, or use Edit for an existing result.'
       : error.message;
     errEl.classList.add('visible');
     return;
@@ -953,20 +1009,29 @@ async function submitResult() {
   okEl.textContent = editingResultId ? 'Updated.' : 'Submitted for approval.';
   okEl.classList.add('visible');
   const wasEditing = !!editingResultId;
+  const wasContinuingPartial = !wasEditing && !!resultEntryExistingRecordId;
   const savedClassId = document.getElementById('result-class')?.value || resultEntrySelection.classId;
   const savedSubjectId = document.getElementById('result-subject')?.value || resultEntrySelection.subjectId;
   editingResultId = null;
+  resultEntryExistingRecordId = null;
   if (wasEditing) {
     teacherActiveWorkspace = 'teacher-my-submissions';
   } else {
     resultEntrySelection = { classId: savedClassId, subjectId: savedSubjectId };
-    // Clear marks for the next student while retaining class/subject/session/term.
+    // Clear the student and marks, then refresh eligibility. Incomplete records
+    // remain selectable for the next assessment component; complete records leave the list.
     ['result-ca1', 'result-ca2', 'result-exam'].forEach(id => { const input = document.getElementById(id); if (input) input.value = ''; });
+    const studentSelect = document.getElementById('result-student');
+    if (studentSelect) studentSelect.value = '';
     const submitButton = document.getElementById('submit-result-button');
-    if (submitButton) submitButton.disabled = true;
+    if (submitButton) { submitButton.disabled = true; submitButton.textContent = 'Submit for approval'; }
   }
   await refreshMyResults();
-  showSuccessToast(wasEditing ? 'Result updated' : 'Result submitted for approval');
+  if (!wasEditing) {
+    resultEntrySelection = { classId: savedClassId, subjectId: savedSubjectId };
+    // refreshMyResults re-renders the dashboard and restores the selection/context.
+  }
+  showSuccessToast(wasEditing ? 'Result updated' : wasContinuingPartial ? 'Result progress saved' : 'Result submitted for approval');
 }
 
 async function approveAsFormMaster(id) {

@@ -945,3 +945,155 @@
 .report-signature-url .signature-line{border-top:1px solid #444;width:100%;margin-top:2px}
 .report-signature-url strong{font-size:10px;margin-top:2px}
 @media print{.report-signature-url{margin-top:2px}.report-signature-url img{max-height:34px}}
+
+/* Premium class-mark-book styling shared by Form Master, Teacher Submissions and Admin Results Queue. */
+.markbook-hint { display:flex; align-items:center; gap:8px; color:var(--text-muted, #6b7280); font-size:12px; margin:0 0 12px; padding:9px 12px; border:1px solid var(--border-soft, #e5e7eb); border-radius:10px; background:linear-gradient(135deg, #f8fafc, #fff); }
+.markbook-hint::before { content:'↔'; display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:7px; background:#e8edf5; color:var(--navy); font-size:16px; font-weight:800; flex-shrink:0; }
+.markbook-class-group { margin:0 0 24px; }
+.markbook-class-title { margin:0 0 10px; color:var(--navy); font-size:16px; font-weight:750; letter-spacing:-.01em; }
+.markbook-scroll { width:100%; max-height:65vh; overflow:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; border:1px solid #dbe2ec; border-radius:13px; background:#fff; box-shadow:0 5px 18px rgba(15,23,42,.06); scrollbar-width:thin; scrollbar-color:#b8c4d5 #f1f5f9; }
+.markbook-scroll:focus-visible { outline:3px solid rgba(59,130,246,.28); outline-offset:2px; }
+.markbook-table.data-table, .markbook-table { width:max-content; min-width:100%; border-collapse:separate !important; border-spacing:0 !important; font-size:13px; background:#fff; }
+.markbook-table th, .markbook-table td { min-width:172px; max-width:230px; padding:12px 13px !important; vertical-align:middle !important; text-align:center; border:0 !important; border-bottom:1px solid #e8edf3 !important; border-right:1px solid #eef2f7 !important; }
+.markbook-table thead th { position:sticky; top:0; z-index:3; background:var(--navy, #172b4d) !important; color:#fff !important; font-size:11px !important; font-weight:750 !important; text-transform:uppercase; letter-spacing:.055em; line-height:1.4; white-space:normal; box-shadow:0 2px 0 rgba(15,23,42,.08); }
+.markbook-table .markbook-student { position:sticky; left:0; z-index:2; min-width:158px; max-width:210px; width:190px; text-align:left !important; white-space:normal; overflow-wrap:anywhere; background:#fff !important; color:#1f2937; font-weight:700; box-shadow:3px 0 7px rgba(15,23,42,.07); }
+.markbook-table thead .markbook-student, .markbook-table thead .markbook-head { z-index:5; background:var(--navy, #172b4d) !important; color:#fff !important; }
+.markbook-table tbody tr:nth-child(even) td { background:#f8fafc; }
+.markbook-table tbody tr:nth-child(even) .markbook-student { background:#f4f7fb !important; }
+.markbook-table tbody tr:hover td { background:#f0f6ff; }
+.markbook-table tbody tr:hover .markbook-student { background:#eaf2ff !important; }
+.markbook-result-cell { min-width:190px !important; line-height:1.45; text-align:left !important; }
+.markbook-score { white-space:nowrap; font-size:12px; color:#667085; line-height:1.7; }
+.markbook-total { display:inline-block; margin-top:7px; padding:5px 9px; border-radius:7px; background:#edf2f8; color:#172b4d; font-weight:800; font-size:13px; white-space:nowrap; }
+.markbook-status { margin-top:7px; font-size:11px; font-weight:700; color:#596579; }
+.markbook-actions { margin-top:9px; display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+.markbook-actions .icon-btn { border-radius:7px; padding:6px 9px; font-size:11px; font-weight:700; border:1px solid #d8e0eb; background:#fff; box-shadow:0 1px 2px rgba(15,23,42,.04); }
+.markbook-actions .icon-btn:hover { border-color:#9aabc2; background:#f5f8fc; }
+.markbook-empty { color:#9aa4b2; text-align:center !important; font-size:18px; background:#fbfcfe; }
+.markbook-table .icon-btn { white-space:nowrap; }
+@media (max-width:640px) {
+  .markbook-scroll { max-height:68vh; border-radius:10px; }
+  .markbook-table th, .markbook-table td { min-width:158px; padding:10px !important; }
+  .markbook-table .markbook-student { min-width:138px; max-width:155px; width:145px; }
+  .markbook-result-cell { min-width:176px !important; }
+  .markbook-total { font-size:12px; }
+}
+
+/* Keep student names scrollable horizontally in Teacher My Submissions and Admin Results Queue. */
+.markbook-table .markbook-student {
+  position: static !important;
+  left: auto !important;
+  z-index: auto !important;
+  box-shadow: none !important;
+}
+.markbook-table tbody tr:nth-child(even) .markbook-student {
+  background: #f8fafc !important;
+}
+.markbook-table tbody tr:hover .markbook-student {
+  background: #f0f6ff !important;
+}
+/* The student-column heading still follows the subject header vertically, but never sticks sideways. */
+.markbook-table thead .markbook-student {
+  position: sticky !important;
+  top: 0 !important;
+  left: auto !important;
+  z-index: 3 !important;
+}
+
+/* v26: keep the student-name column pinned while swiping across subjects, and minimise row height. */
+.markbook-table .markbook-student {
+  position: sticky !important;
+  left: 0 !important;
+  z-index: 4 !important;
+  box-shadow: 3px 0 7px rgba(15, 23, 42, .09) !important;
+  background: #fff !important;
+}
+.markbook-table tbody tr:nth-child(even) .markbook-student {
+  background: #f4f7fb !important;
+}
+.markbook-table tbody tr:hover .markbook-student {
+  background: #eaf2ff !important;
+}
+.markbook-table thead .markbook-student {
+  position: sticky !important;
+  top: 0 !important;
+  left: 0 !important;
+  z-index: 6 !important;
+}
+.markbook-table th,
+.markbook-table td {
+  padding: 4px 8px !important;
+  line-height: 1.2 !important;
+}
+.markbook-table thead th {
+  padding-top: 7px !important;
+  padding-bottom: 7px !important;
+  line-height: 1.2 !important;
+}
+.markbook-score {
+  line-height: 1.2 !important;
+}
+.markbook-total {
+  margin-top: 2px !important;
+  padding: 2px 6px !important;
+}
+.markbook-status {
+  margin-top: 2px !important;
+  line-height: 1.2 !important;
+}
+.markbook-actions {
+  margin-top: 3px !important;
+  gap: 4px !important;
+}
+.markbook-actions .icon-btn {
+  padding: 3px 6px !important;
+  line-height: 1.2 !important;
+}
+@media (max-width: 640px) {
+  .markbook-table th,
+  .markbook-table td {
+    padding: 3px 6px !important;
+  }
+  .markbook-table thead th {
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+  }
+}
+
+
+/* v27: compact, left-to-right result rows for teacher submissions and admin queue. */
+.markbook-record-table { width: max-content !important; min-width: 100% !important; table-layout: auto; }
+.markbook-record-table th,
+.markbook-record-table td { min-width: 54px !important; width: auto; padding: 5px 7px !important; white-space: nowrap; }
+.markbook-record-table th.markbook-student,
+.markbook-record-table td.markbook-student { min-width: 88px !important; width: 88px !important; max-width: 88px !important; white-space: normal; overflow-wrap: anywhere; }
+.markbook-record-table th:nth-child(4),
+.markbook-record-table td:nth-child(4) { min-width: 64px !important; }
+.markbook-record-table th:nth-child(5),
+.markbook-record-table td:nth-child(5) { min-width: 90px !important; }
+.markbook-record-table th:nth-child(6),
+.markbook-record-table td:nth-child(6) { min-width: 74px !important; }
+.markbook-record-table th:nth-child(7),
+.markbook-record-table td:nth-child(7) { min-width: 82px !important; }
+.markbook-record-table .markbook-total { margin: 0 !important; padding: 2px 5px !important; }
+.markbook-record-table .markbook-status { margin: 0 !important; }
+.markbook-record-table .markbook-actions { margin: 0 !important; gap: 3px !important; }
+.markbook-record-table .markbook-actions .icon-btn { padding: 3px 5px !important; }
+
+
+/* v28: subject-by-subject navigation reduces horizontal swiping in submission and queue markbooks. */
+.markbook-group-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
+.markbook-group-heading .markbook-class-title,
+.markbook-group-heading .panel-title { margin:0; }
+.markbook-subject-nav { display:flex; align-items:center; justify-content:flex-end; gap:8px; flex-wrap:nowrap; }
+.markbook-subject-nav .btn-outline { min-height:34px; padding:6px 11px; border-radius:8px; font-size:12px; font-weight:700; white-space:nowrap; }
+.markbook-subject-count { min-width:42px; text-align:center; color:var(--text-muted,#667085); font-size:12px; font-weight:750; white-space:nowrap; }
+.markbook-subject-stack { margin-bottom:18px; }
+.markbook-subject-panel .markbook-class-title { margin:0 0 8px; }
+.markbook-subject-panel .markbook-scroll { max-height:58vh; }
+@media (max-width:640px) {
+  .markbook-group-heading { align-items:flex-start; }
+  .markbook-subject-nav { width:100%; justify-content:space-between; }
+  .markbook-subject-nav .btn-outline { flex:1; }
+  .markbook-subject-count { min-width:48px; }
+}

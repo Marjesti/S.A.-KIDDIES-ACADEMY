@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Class Mark Book</title>
 <link rel="stylesheet" href="css/style.css?v=4">
-<link rel="stylesheet" href="css/dashboard.css?v=12">
+<link rel="stylesheet" href="css/dashboard.css?v=13">
 <style>
   .teacher-topbar {
     display: flex; justify-content: space-between; align-items: center;
@@ -41,17 +41,17 @@
   .markbook-page.sliding-out-left { transform: translateX(-40px); opacity: 0; }
   .markbook-page.sliding-out-right { transform: translateX(40px); opacity: 0; }
 
-  .markbook-table-wrap { max-height: 65vh; overflow: auto; }
-  .markbook-table { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 560px; }
+  .markbook-table-wrap { max-height: 65vh; overflow: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+  .markbook-table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
   .markbook-table thead th {
     position: sticky; top: 0; z-index: 2;
     background: var(--navy); color: #fff; padding: 10px 8px; text-align: center;
     font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
   }
-  .markbook-table thead th:first-child { text-align: left; position: sticky; left: 0; z-index: 3; }
-  .markbook-table td { padding: 9px 8px; text-align: center; border-bottom: 1px solid var(--border-soft); }
+  .markbook-table thead th:first-child { text-align: left; position: sticky; left: 0; z-index: 6; width: 86px; min-width: 86px; max-width: 86px; }
+  .markbook-table td { min-width: 48px; padding: 5px 5px; text-align: center; border-bottom: 1px solid var(--border-soft); }
   .markbook-table td:first-child {
-    text-align: left; font-weight: 600; position: sticky; left: 0; background: #fff; z-index: 1;
+    text-align: left; font-weight: 600; position: sticky; left: 0; background: #fff; z-index: 4; width: 86px; min-width: 86px; max-width: 86px; overflow-wrap: anywhere;
     border-right: 1px solid var(--border-soft);
   }
   .markbook-table tbody tr:nth-child(even) td:first-child { background: #FBFAF7; }
@@ -72,6 +72,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.js?v=4"></script>
   <script src="js/layout.js?v=15"></script>
-  <script src="js/mark-book.js?v=1"></script>
+  <script src="js/mark-book.js?v=2"></script>
 </body>
 </html>

@@ -119,52 +119,40 @@ function actionButtons(r) {
   return btns.join(' &middot; ');
 }
 
-function resultRowHtml(r) {
-  return `
-    <tr>
-      <td>${r.students?.name || 'Unknown'}</td>
-      <td class="text-muted">CA1: ${r.ca1_score ?? '&mdash;'} &middot; CA2: ${r.ca2_score ?? '&mdash;'} &middot; Exam: ${r.exam_score ?? '&mdash;'}</td>
-      <td>${r.total_score ?? '&mdash;'} (${r.grade || '&mdash;'})</td>
-      <td>${statusBadge(r.status)}</td>
-      <td>${actionButtons(r)}</td>
-    </tr>`;
-}
+function queueEscapeHtml(value) { return String(value ?? '').replace(/[&<>\"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch])); }
 
-function subjectSubsectionHtml(subjectName, results) {
-  const rows = results.length
-    ? results.map(resultRowHtml).join('')
-    : '';
-  if (!results.length) return '';
-
-  return `
-    <div style="margin-bottom: 20px;">
-      <p style="font-weight:600; font-size:14.5px; margin: 0 0 8px;">${subjectName}</p>
-      <div class="data-table-wrap"><table class="data-table">
-        <thead><tr><th>Student</th><th>CA / Exam</th><th>Total</th><th>Status</th><th></th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table></div>
-    </div>`;
-}
-
-function classGroupHtml(className, resultsInClass) {
+function classGroupHtml(className, resultsInClass, classKey = 'unassigned') {
   if (!resultsInClass.length) return '';
-
-  // Group this class's results by subject
-  const bySubject = {};
-  resultsInClass.forEach((r) => {
-    const name = r.subjects?.name || 'Unassigned subject';
-    if (!bySubject[name]) bySubject[name] = [];
-    bySubject[name].push(r);
+  const subjectMap = new Map();
+  resultsInClass.forEach(r => {
+    const subject = r.subjects?.name || 'Unassigned subject';
+    if (!subjectMap.has(subject)) subjectMap.set(subject, []);
+    subjectMap.get(subject).push(r);
   });
+  const subjects = [...subjectMap.entries()].sort((a,b) => a[0].localeCompare(b[0]));
+  const navId = `queue-subject-${String(classKey).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+  const subjectHtml = subjects.map(([subject, records], index) => {
+    const rows = records.sort((a,b) => (a.students?.name || '').localeCompare(b.students?.name || '')).map(r => `
+      <tr><th scope="row" class="markbook-student">${queueEscapeHtml(r.students?.name || 'Unknown student')}</th>
+      <td>${r.ca1_score ?? '—'}</td><td>${r.ca2_score ?? '—'}</td><td>${r.exam_score ?? '—'}</td>
+      <td><span class="markbook-total">${r.total_score ?? '—'} (${queueEscapeHtml(r.grade || '—')})</span></td>
+      <td><span class="markbook-status">${statusBadge(r.status)}</span></td>
+      <td><div class="markbook-actions">${actionButtons(r)}</div></td></tr>`).join('');
+    return `<section class="markbook-subject-panel" data-markbook-index="${index}" style="${index ? 'display:none;' : ''}"><h4 class="markbook-class-title">${queueEscapeHtml(subject)}</h4><div class="markbook-scroll" tabindex="0" aria-label="${queueEscapeHtml(className)} ${queueEscapeHtml(subject)} results"><table class="data-table markbook-table markbook-record-table"><thead><tr><th class="markbook-student markbook-head">Name</th><th>CA1</th><th>CA2</th><th>Exams</th><th>Total (Grade)</th><th>Status</th><th>Action</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+  }).join('');
+  return `<div class="panel markbook-subject-stack" id="${navId}"><p class="eyebrow">${resultsInClass.length} result${resultsInClass.length === 1 ? '' : 's'}</p><div class="markbook-group-heading"><h3 class="panel-title">${queueEscapeHtml(className)}</h3><div class="markbook-subject-nav"><button class="btn-outline" onclick="moveQueueSubject('${navId}',-1)" aria-label="Previous subject">‹ Previous</button><span class="markbook-subject-count">1 / ${subjects.length}</span><button class="btn-outline" onclick="moveQueueSubject('${navId}',1)" aria-label="Next subject">Next ›</button></div></div><div class="markbook-subject-panels">${subjectHtml}</div></div>`;
+}
 
-  const subjectsHtml = Object.keys(bySubject).sort().map((name) => subjectSubsectionHtml(name, bySubject[name])).join('');
-
-  return `
-    <div class="panel">
-      <p class="eyebrow">${resultsInClass.length} result${resultsInClass.length === 1 ? '' : 's'}</p>
-      <h3 class="panel-title">${className}</h3>
-      ${subjectsHtml}
-    </div>`;
+function moveQueueSubject(groupId, direction) {
+  const group = document.getElementById(groupId);
+  if (!group) return;
+  const panels = [...group.querySelectorAll(':scope > .markbook-subject-panels > .markbook-subject-panel')];
+  if (!panels.length) return;
+  const current = Math.max(0, panels.findIndex(panel => panel.style.display !== 'none'));
+  const next = (current + direction + panels.length) % panels.length;
+  panels.forEach((panel, index) => { panel.style.display = index === next ? '' : 'none'; });
+  const count = group.querySelector('.markbook-subject-count');
+  if (count) count.textContent = `${next + 1} / ${panels.length}`;
 }
 
 function renderResultsBody(results) {
@@ -174,11 +162,11 @@ function renderResultsBody(results) {
   // Group results by class, in class-name order; results with no class go in "Unassigned" at the end.
   const groupsHtml = currentClasses.map((c) => {
     const resultsInClass = results.filter((r) => r.students?.classes?.id === c.id);
-    return classGroupHtml(c.name, resultsInClass);
+    return classGroupHtml(c.name, resultsInClass, c.id);
   }).join('');
 
   const unassignedResults = results.filter((r) => !r.students?.classes?.id);
-  const unassignedHtml = classGroupHtml('Unassigned', unassignedResults);
+  const unassignedHtml = classGroupHtml('Unassigned', unassignedResults, 'unassigned');
 
   const noDataHtml = !results.length
     ? `<div class="panel"><div class="empty-state">No results here yet.</div></div>` : '';

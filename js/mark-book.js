@@ -134,7 +134,8 @@ function renderMarkBookShell() {
 
   if (markBookSubjects.length) {
     renderMarkBookPage();
-    attachSwipeHandlers();
+    // Subject changes use the explicit Previous/Next controls. Horizontal swipes
+    // inside the mark-book table are reserved for scrolling across score columns.
   }
 }
 
