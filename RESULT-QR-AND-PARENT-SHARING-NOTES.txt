@@ -1,0 +1,17 @@
+SRMS v28 — Result QR and Parent Sharing update
+
+Included:
+1. QR codes on result cards are generated at 160x160 instead of 90x90 for better scanning/printing.
+2. Verification links are constructed using URL() and the current deployment subdirectory, avoiding fragile string replacement of the page name.
+3. The existing per-student/session report_verifications token is printed as a readable Result Verification ID below the QR code.
+4. The whole-class report generation flow now adds a parent-sharing queue. It identifies students with guardian phone numbers and verification tokens and lets the administrator open WhatsApp messages one parent at a time. The administrator must review/tap Send in WhatsApp; a browser cannot silently send WhatsApp messages to a whole class.
+5. No database migration is included or required for these front-end changes.
+
+Automated WhatsApp delivery is NOT activated in this ZIP. It requires an approved WhatsApp Business Platform/provider account and secure server-side integration (for example, a Supabase Edge Function with secrets configured server-side). Do not place provider tokens in browser JavaScript. After that provider is chosen/configured, the same parent queue can be connected to automated delivery and delivery-status tracking.
+
+Test before deployment:
+- Generate one report and scan its QR using a second phone.
+- Confirm verify.html opens and automatically looks up the published result.
+- Print/save a whole class and scan several QR codes from the PDF/printed pages.
+- Confirm the printed verification ID can be typed into verify.html if scanning fails.
+- Generate a class batch and check the parent-sharing queue; confirm missing guardian phone numbers are flagged.

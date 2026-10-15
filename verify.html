@@ -13,6 +13,16 @@
   .report-wrap { max-width: 720px; width: 100%; margin: 20px auto 0; }
   .report-table-scroll { overflow-x: auto; }
   .download-pdf-btn { margin-top: 14px; }
+  .verification-authorities { position:relative; display:flex; align-items:flex-end; justify-content:space-between; gap:18px; margin:20px 8px 8px; padding-top:12px; border-top:1px solid #d9e2df; break-inside:avoid; page-break-inside:avoid; }
+  .verification-signature { display:flex; flex-direction:column; align-items:center; justify-content:flex-end; flex:1; min-width:0; text-align:center; font-size:11px; color:#243b38; }
+  .verification-signature img { display:block; max-width:100%; width:auto; height:auto; max-height:56px; object-fit:contain; }
+  .verification-signature .signature-line { width:100%; max-width:190px; border-top:1px solid #344b47; margin-top:3px; }
+  .verification-signature strong { margin-top:4px; }
+  /* Center the official stamp across the signature area, with a subtle realistic tilt. */
+  .verification-stamp { position:absolute; left:50%; top:50%; z-index:2; display:flex; justify-content:center; align-items:center; width:92px; transform:translate(-50%,-50%); pointer-events:none; }
+  .verification-stamp img { display:block; width:88px; height:88px; object-fit:contain; transform:rotate(-5deg); }
+  @media(max-width:480px) { .verification-authorities { gap:8px; margin-left:2px; margin-right:2px; } .verification-stamp { width:70px; } .verification-stamp img { width:68px; height:68px; } .verification-signature img { max-height:44px; } }
+  @media print { .verification-authorities { margin-top:10px; } .verification-stamp img { width:68px; height:68px; } .verification-signature img { max-height:40px; } }
 
   @media print {
     @page { size: A4; margin: 14mm; }
@@ -207,6 +217,24 @@
             <p><strong>Headteacher/Principal's remarks:</strong> ${first.headteacher_remark || 'Not yet recorded.'}</p>
             <p><strong>Teacher's remark:</strong> ${first.teacher_remark || 'Not yet recorded.'}</p>
           </div>
+          ${(() => {
+            const classLabel = String(first.class_name || '').toLowerCase();
+            const isPrimary = classLabel.includes('primary') || classLabel.includes('nursery') || classLabel.includes('pre-nursery') || classLabel.includes('playgroup') || classLabel === 'nur';
+            const signatureLabel = isPrimary ? 'Headteacher' : 'Principal';
+            const signatureUrl = isPrimary
+              ? (first.headteacher_signature_url || 'assets/head-teacher.png')
+              : (first.principal_signature_url || 'assets/principal.png');
+            const stampUrl = first.school_stamp_url || first.stamp_url || 'assets/sak-original-stamp.png';
+            const cacheBust = (url) => `${url}${String(url).includes('?') ? '&' : '?'}cb=${Date.now()}`;
+            return `<div class="verification-authorities">
+              <div class="verification-signature">
+                <img src="${cacheBust(signatureUrl)}" alt="${signatureLabel} signature" onerror="this.style.display='none'">
+                <div class="signature-line"></div>
+                <strong>${signatureLabel}'s Signature</strong>
+              </div>
+              <div class="verification-stamp"><img src="${cacheBust(stampUrl)}" alt="School official stamp" onerror="this.style.display='none'"></div>
+            </div>`;
+          })()}
         </div>
 
         <button class="btn-primary download-pdf-btn" onclick="window.print()">Download as PDF</button>

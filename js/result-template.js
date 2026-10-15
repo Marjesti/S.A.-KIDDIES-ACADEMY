@@ -80,12 +80,15 @@ function renderPageShell() {
     </div>
 
     <div id="report-card-container"></div>
+    <div id="bulk-share-container"></div>
   `;
 }
 
 async function onClassChange() {
   selectedClassId = document.getElementById('class-select').value;
   document.getElementById('report-card-container').innerHTML = '';
+  const bulkShare = document.getElementById('bulk-share-container');
+  if (bulkShare) bulkShare.innerHTML = '';
   if (!selectedClassId) { document.getElementById('class-actions').style.display = 'none'; return; }
 
   document.getElementById('class-actions').style.display = 'block';
@@ -281,7 +284,7 @@ function reportCardHtml(student, stats, token, verifyUrl) {
             <tr><td>Days present</td><td>${notes.days_present ?? '--'}</td></tr>
             <tr><td>Days absent</td><td>${notes.days_absent ?? '--'}</td></tr>
           </table>
-          ${token ? `<div class="report-verification-block"><div class="report-qr" id="qr-${student.id}"></div></div>` : ''}
+          ${token ? `<div class="report-verification-block"><div class="report-qr" id="qr-${student.id}"></div><div class="report-verification-code"><strong>Result verification ID</strong><span>${escapeHtml(token)}</span></div></div>` : ''}
         </div>
       </div>
 
@@ -309,7 +312,7 @@ async function showReportCard(studentId) {
 
   const stats = computeClassStats();
   const token = await getOrCreateToken(studentId);
-  const verifyUrl = token ? `${window.location.origin}${window.location.pathname.replace('result-template.html', '')}verify.html?token=${token}` : null;
+  const verifyUrl = token ? buildVerificationUrl(token) : null;
 
   container.innerHTML = `
     ${reportCardHtml(student, stats, token, verifyUrl)}
@@ -319,9 +322,7 @@ async function showReportCard(studentId) {
     </div>
   `;
 
-  if (verifyUrl && window.QRCode) {
-    new QRCode(document.getElementById(`qr-${studentId}`), { text: verifyUrl, width: 90, height: 90 });
-  }
+  if (verifyUrl) renderVerificationQr(studentId, verifyUrl);
 }
 
 async function downloadWholeClass() {
@@ -348,11 +349,61 @@ async function downloadWholeClass() {
   classStudents.forEach((student) => {
     const token = tokens[student.id];
     if (token && window.QRCode) {
-      const verifyUrl = `${window.location.origin}${window.location.pathname.replace('result-template.html', '')}verify.html?token=${token}`;
-      const holder = document.getElementById(`qr-${student.id}`);
-      if (holder) new QRCode(holder, { text: verifyUrl, width: 90, height: 90 });
+      const verifyUrl = buildVerificationUrl(token);
+      renderVerificationQr(student.id, verifyUrl);
     }
   });
+  renderBulkShareQueue(tokens);
+}
+
+function buildVerificationUrl(token) {
+  const basePath = window.location.pathname.replace(/[^/]*$/, '');
+  const url = new URL(`${basePath}verify.html`, window.location.origin);
+  url.searchParams.set('token', token);
+  return url.toString();
+}
+
+function renderVerificationQr(studentId, verifyUrl) {
+  const holder = document.getElementById(`qr-${studentId}`);
+  if (!holder) return;
+  holder.innerHTML = '';
+  if (!window.QRCode) {
+    holder.textContent = 'QR unavailable';
+    return;
+  }
+  try {
+    new QRCode(holder, { text: verifyUrl, width: 160, height: 160, correctLevel: QRCode.CorrectLevel.M });
+  } catch (error) {
+    holder.textContent = 'QR unavailable';
+    console.error('Could not generate result verification QR:', error);
+  }
+}
+
+function renderBulkShareQueue(tokens) {
+  const target = document.getElementById('bulk-share-container');
+  if (!target) return;
+  const rows = classStudents.map((student) => {
+    const token = tokens[student.id];
+    const phone = String(student.guardian_phone || '').trim();
+    const url = token ? buildVerificationUrl(token) : '';
+    const ready = Boolean(phone && url);
+    return `<div class="queue-row"><span><strong>${escapeHtml(student.name)}</strong><br><small>${escapeHtml(student.admission_no || 'No admission number')} · ${phone ? escapeHtml(phone) : 'No parent phone'}</small></span><span>${ready ? `<button class="btn-outline" onclick="shareViaWhatsApp('${escapeJsString(student.name)}','${escapeJsString(url)}','${escapeJsString(phone)}')">Open WhatsApp</button>` : `<span class="text-muted">${url ? 'Add parent phone' : 'QR/token unavailable'}</span>`}</span></div>`;
+  }).join('');
+  const readyCount = classStudents.filter(s => s.guardian_phone && tokens[s.id]).length;
+  target.innerHTML = `<div class="panel"><h2 class="panel-title">Share results with parents</h2><p class="text-muted">${readyCount} of ${classStudents.length} parents have a phone number and a verification link. Open WhatsApp for each parent, review the message, then tap Send. This manual mode does not send messages silently.</p><div class="panel-toolbar"><button class="btn-primary" onclick="openNextWhatsAppShare()" ${readyCount ? '' : 'disabled'}>Start parent-sharing queue (${readyCount})</button></div><div id="bulk-share-rows">${rows}</div><p class="text-muted" style="margin-top:10px;">Automated one-click delivery can be enabled after an approved WhatsApp Business provider and secure server-side credentials are configured.</p></div>`;
+  window._resultShareQueue = classStudents.filter(s => s.guardian_phone && tokens[s.id]).map(s => ({name:s.name, phone:s.guardian_phone, url:buildVerificationUrl(tokens[s.id])}));
+  window._resultShareQueueIndex = 0;
+}
+
+function openNextWhatsAppShare() {
+  const queue = window._resultShareQueue || [];
+  const index = window._resultShareQueueIndex || 0;
+  if (index >= queue.length) { alert('You have reached the end of the parent-sharing queue.'); return; }
+  const item = queue[index];
+  window._resultShareQueueIndex = index + 1;
+  shareViaWhatsApp(item.name, item.url, item.phone);
+  const button = document.querySelector('#bulk-share-container .panel-toolbar button');
+  if (button) button.textContent = index + 1 < queue.length ? `Next parent (${index + 2} of ${queue.length})` : 'Queue opened — finish in WhatsApp';
 }
 
 function shareViaWhatsApp(studentName, verifyUrl, guardianPhone) {
@@ -371,6 +422,14 @@ function shareViaWhatsApp(studentName, verifyUrl, guardianPhone) {
 
 loadResultTemplatePage();
 
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function escapeJsString(value) {
+  return String(value ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/[\r\n]/g, ' ');
+}
 
 function escapeAttribute(value) {
   return String(value || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;');

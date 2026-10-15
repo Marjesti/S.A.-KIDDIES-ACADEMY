@@ -1097,3 +1097,12 @@
   .markbook-subject-nav .btn-outline { flex:1; }
   .markbook-subject-count { min-width:48px; }
 }
+
+/* Result verification QR: larger, print-friendly, with a readable fallback code */
+.report-verification-block{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;margin:10px auto 4px;max-width:100%;break-inside:avoid;page-break-inside:avoid}
+.report-verification-block .report-qr{display:flex;align-items:center;justify-content:center;background:#fff;padding:6px;min-width:160px;min-height:160px}
+.report-verification-block .report-qr img,.report-verification-block .report-qr canvas{display:block;width:160px!important;height:160px!important;max-width:100%;image-rendering:pixelated}
+.report-verification-code{display:flex;flex-direction:column;align-items:center;gap:2px;max-width:100%;text-align:center;font-size:10px;line-height:1.35;overflow-wrap:anywhere;word-break:break-word}
+.report-verification-code strong{font-size:10px;letter-spacing:.2px}
+.report-verification-code span{font-family:monospace;font-size:10px;letter-spacing:.2px}
+@media print{.report-verification-block .report-qr{min-width:130px;min-height:130px}.report-verification-block .report-qr img,.report-verification-block .report-qr canvas{width:130px!important;height:130px!important}.report-verification-code{font-size:8px}.report-verification-code span{font-size:8px}}
