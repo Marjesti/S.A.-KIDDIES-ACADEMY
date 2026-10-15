@@ -224,7 +224,7 @@
             const signatureUrl = isPrimary
               ? (first.headteacher_signature_url || 'assets/head-teacher.png')
               : (first.principal_signature_url || 'assets/principal.png');
-            const stampUrl = first.school_stamp_url || first.stamp_url || 'assets/sak-original-stamp.png';
+            const stampUrl = first.school_stamp_url || first.stamp_url || ''; // Use only the configured stamp URL; never substitute a local image.
             const cacheBust = (url) => `${url}${String(url).includes('?') ? '&' : '?'}cb=${Date.now()}`;
             return `<div class="verification-authorities">
               <div class="verification-signature">
@@ -232,7 +232,7 @@
                 <div class="signature-line"></div>
                 <strong>${signatureLabel}'s Signature</strong>
               </div>
-              <div class="verification-stamp"><img src="${cacheBust(stampUrl)}" alt="School official stamp" onerror="this.style.display='none'"></div>
+              ${stampUrl ? `<div class="verification-stamp"><img src="${cacheBust(stampUrl)}" alt="School official stamp" onerror="this.style.display='none'"></div>` : ''}
             </div>`;
           })()}
         </div>
