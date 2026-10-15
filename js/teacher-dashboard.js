@@ -6,6 +6,8 @@ let myStudents = [];
 let myOwnResults = [];
 let formMasterPendingResults = [];
 let editingResultId = null;
+// Preserve the teacher's place in the submissions list while the edit sheet is open.
+let teacherEditReturnState = null;
 // Remember the selected teacher workspace when the dashboard re-renders after an action.
 let teacherActiveWorkspace = 'teacher-assignments';
 let ca1Max = 15;
@@ -532,25 +534,72 @@ async function reloadTeacherStudents() {
 }
 
 function renderTeacherInlineEditForm() {
-  const classFilterOptions = myClasses.map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
+  const classFilterOptions = myClasses.map((c) => `<option value="${c.id}">${teacherEsc(c.name)}</option>`).join('');
   const subjectOptions = renderSubjectOptionsForSection('');
   return `
-    <div class="panel" id="teacher-inline-result-edit" style="border-left:4px solid var(--gold); margin-bottom:18px;">
-      <p class="eyebrow">Edit result</p>
-      <h3 class="panel-title">Update result</h3>
-      <div class="form-grid">
-        <div class="field"><label for="result-class">Class</label><select id="result-class" onchange="onResultClassChange()"><option value="">Select a class first</option>${classFilterOptions}</select></div>
-        <div class="field"><label for="result-student">Student</label><select id="result-student"><option value="">Select a class first</option></select></div>
-        <div class="field"><label for="result-subject">Subject</label><select id="result-subject">${subjectOptions}</select></div>
-        <div class="field"><label for="result-ca1">CA1 score</label><input type="number" id="result-ca1" min="0"></div>
-        <div class="field"><label for="result-ca2">CA2 score</label><input type="number" id="result-ca2" min="0"></div>
-        <div class="field"><label for="result-exam">Exam score</label><input type="number" id="result-exam" min="0"></div>
+    <div class="teacher-edit-sheet-backdrop" id="teacher-result-edit-backdrop" onclick="handleTeacherEditBackdrop(event)" aria-hidden="true"></div>
+    <section class="teacher-edit-sheet" id="teacher-inline-result-edit" role="dialog" aria-modal="true" aria-labelledby="teacher-edit-sheet-title" aria-hidden="true">
+      <div class="teacher-edit-sheet-grabber" aria-hidden="true"><span></span></div>
+      <header class="teacher-edit-sheet-header">
+        <div><p class="eyebrow">Edit result</p><h3 class="panel-title" id="teacher-edit-sheet-title">Update student marks</h3><p class="teacher-edit-sheet-hint">Update the required assessment and leave other scores unchanged.</p></div>
+        <button type="button" class="teacher-edit-close" onclick="cancelEditResult()" aria-label="Close edit form">×</button>
+      </header>
+      <div class="teacher-edit-sheet-body">
+        <div class="form-grid">
+          <div class="field"><label for="result-class">Class</label><select id="result-class" onchange="onResultClassChange()"><option value="">Select a class first</option>${classFilterOptions}</select></div>
+          <div class="field"><label for="result-student">Student</label><select id="result-student"><option value="">Select a class first</option></select></div>
+          <div class="field"><label for="result-subject">Subject</label><select id="result-subject">${subjectOptions}</select></div>
+          <div class="field"><label for="result-ca1">CA1 score</label><input type="number" id="result-ca1" min="0" inputmode="decimal"></div>
+          <div class="field"><label for="result-ca2">CA2 score</label><input type="number" id="result-ca2" min="0" inputmode="decimal"></div>
+          <div class="field"><label for="result-exam">Exam score</label><input type="number" id="result-exam" min="0" inputmode="decimal"></div>
+        </div>
+        <div id="form-error" class="error-banner" role="alert"></div>
+        <div id="form-success" class="error-banner" role="status" style="background:#E8F3EA; color:#3A7D44;"></div>
       </div>
-      <button class="btn-gold" onclick="submitResult()">Save changes</button>
-      <button class="btn-outline" onclick="cancelEditResult()">Cancel</button>
-      <div id="form-error" class="error-banner"></div>
-      <div id="form-success" class="error-banner" style="background:#E8F3EA; color:#3A7D44;"></div>
-    </div>`;
+      <footer class="teacher-edit-sheet-footer">
+        <button type="button" class="btn-outline" onclick="cancelEditResult()">Cancel</button>
+        <button type="button" class="btn-gold" id="teacher-edit-save-button" onclick="submitResult()">Save Update</button>
+      </footer>
+    </section>`;
+}
+
+function openTeacherEditSheet() {
+  const sheet = document.getElementById('teacher-inline-result-edit');
+  const backdrop = document.getElementById('teacher-result-edit-backdrop');
+  if (!sheet || !backdrop) return;
+  backdrop.classList.add('is-open');
+  sheet.classList.add('is-open');
+  sheet.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('teacher-edit-sheet-open');
+  // Focus the dialog itself; do not automatically open the mobile keyboard.
+  sheet.setAttribute('tabindex', '-1');
+  setTimeout(() => sheet.focus({ preventScroll: true }), 220);
+}
+
+function closeTeacherEditSheet() {
+  document.getElementById('teacher-inline-result-edit')?.classList.remove('is-open');
+  const sheet = document.getElementById('teacher-inline-result-edit');
+  if (sheet) sheet.setAttribute('aria-hidden', 'true');
+  document.getElementById('teacher-result-edit-backdrop')?.classList.remove('is-open');
+  document.body.classList.remove('teacher-edit-sheet-open');
+}
+
+function handleTeacherEditBackdrop(event) {
+  if (event.target?.id === 'teacher-result-edit-backdrop') cancelEditResult();
+}
+
+function restoreTeacherEditScroll() {
+  const state = teacherEditReturnState;
+  if (!state) return;
+  requestAnimationFrame(() => {
+    window.scrollTo({ top: state.scrollY || 0, behavior: 'auto' });
+    if (state.listScrolls) {
+      document.querySelectorAll('.markbook-scroll').forEach((el, index) => {
+        const value = state.listScrolls[String(index)];
+        if (value !== undefined) el.scrollLeft = value;
+      });
+    }
+  });
 }
 
 function renderDashboard() {
@@ -658,6 +707,28 @@ function renderDashboard() {
     ` : `<div class="panel"><div class="empty-state">No active academic session right now.</div></div>`}
   `;
 
+  // Bottom-sheet styles are injected once so this remains a self-contained dashboard change.
+  if (!document.getElementById('teacher-edit-sheet-styles')) {
+    const style = document.createElement('style');
+    style.id = 'teacher-edit-sheet-styles';
+    style.textContent = `
+      .teacher-edit-sheet-backdrop{position:fixed;inset:0;background:rgba(12,22,38,.48);z-index:1090;opacity:0;visibility:hidden;transition:opacity .22s ease,visibility .22s ease}
+      .teacher-edit-sheet-backdrop.is-open{opacity:1;visibility:visible}
+      .teacher-edit-sheet{position:fixed;z-index:1091;left:0;right:0;bottom:0;width:100%;max-height:min(88dvh,820px);display:flex;flex-direction:column;background:var(--surface,#fff);color:var(--text,#172033);border-radius:20px 20px 0 0;box-shadow:0 -12px 40px rgba(0,0,0,.22);transform:translateY(105%);visibility:hidden;transition:transform .24s cubic-bezier(.2,.75,.25,1),visibility .24s; padding-bottom:env(safe-area-inset-bottom,0px)}
+      .teacher-edit-sheet.is-open{transform:translateY(0);visibility:visible}
+      .teacher-edit-sheet-grabber{display:flex;justify-content:center;padding:10px 16px 4px;flex:none}.teacher-edit-sheet-grabber span{width:42px;height:4px;border-radius:99px;background:#c5cbd3}
+      .teacher-edit-sheet-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:8px 18px 14px;border-bottom:1px solid rgba(120,130,145,.2);flex:none}
+      .teacher-edit-sheet-header .eyebrow{margin:0 0 4px}.teacher-edit-sheet-header .panel-title{margin:0}.teacher-edit-sheet-hint{font-size:13px;line-height:1.4;color:var(--muted,#667085);margin:6px 0 0}
+      .teacher-edit-close{border:0;background:transparent;font-size:30px;line-height:1;min-width:44px;min-height:44px;border-radius:10px;color:inherit;cursor:pointer}
+      .teacher-edit-sheet-body{padding:16px 18px 18px;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}.teacher-edit-sheet-body .form-grid{gap:12px}
+      .teacher-edit-sheet-footer{display:flex;gap:10px;padding:12px 18px calc(12px + env(safe-area-inset-bottom,0px));border-top:1px solid rgba(120,130,145,.2);background:var(--surface,#fff);flex:none}.teacher-edit-sheet-footer button{flex:1;min-height:46px}
+      body.teacher-edit-sheet-open{overflow:hidden}.teacher-edit-sheet [hidden]{display:none!important}
+      @media(min-width:700px){.teacher-edit-sheet{left:50%;right:auto;bottom:20px;width:min(620px,calc(100% - 32px));max-height:min(82dvh,760px);border-radius:20px;transform:translate(-50%,105%)}.teacher-edit-sheet.is-open{transform:translate(-50%,0)}.teacher-edit-sheet-footer{border-radius:0 0 20px 20px}}
+      @media(prefers-reduced-motion:reduce){.teacher-edit-sheet,.teacher-edit-sheet-backdrop{transition:none}}
+    `;
+    document.head.appendChild(style);
+  }
+
   // Open the result-entry workspace when editing, rather than hiding the form
   // behind the dashboard's single-workspace navigation.
   // Keep the teacher in the workspace they were using after adding, editing,
@@ -676,6 +747,10 @@ function renderDashboard() {
   document.getElementById('student-management-panel')?.remove();
   if (!editingResultId && document.getElementById('result-class')) {
     setTimeout(restoreResultEntryContext, 0);
+  }
+  if (editingResultId) {
+    openTeacherEditSheet();
+    restoreTeacherEditScroll();
   }
 }
 
@@ -893,7 +968,13 @@ async function loadEligibleResultStudents() {
     .filter(r => r.status !== 'published' && (r.ca1_score == null || r.ca2_score == null || r.exam_score == null))
     .map(r => [String(r.student_id), r]));
   updateResultEntryProgress(classStudents, resultEntryExistingByStudent);
+  // Edit mode must never use the fresh-submission elimination list. A result
+  // already being edited must remain visible/selectable even if it is complete.
+  const editingStudentId = editingResultId
+    ? myOwnResults.find(r => String(r.id) === String(editingResultId))?.student_id
+    : null;
   const eligible = classStudents.filter(student => {
+    if (editingResultId && String(student.id) === String(editingStudentId)) return true;
     const existing = rowsByStudent.get(String(student.id));
     return !existing || resultEntryPartialByStudent.has(String(student.id));
   });
@@ -923,39 +1004,63 @@ function onResultStudentChange() {
   updateResultSubmitButton();
 }
 
-function startEditResult(id) {
-  const r = myOwnResults.find((x) => x.id === id);
+async function startEditResult(id) {
+  const r = myOwnResults.find((x) => String(x.id) === String(id));
   if (!r) return;
+  // Capture page and horizontal markbook positions before rendering the edit sheet.
+  const listScrolls = {};
+  document.querySelectorAll('.markbook-scroll').forEach((el, index) => {
+    listScrolls[String(index)] = el.scrollLeft;
+    el.dataset.teacherScrollKey = String(index);
+  });
+  teacherEditReturnState = { scrollY: window.scrollY, listScrolls, workspace: teacherActiveWorkspace };
   editingResultId = id;
   teacherActiveWorkspace = 'teacher-my-submissions';
   renderDashboard();
 
-  // Pre-fill after the form renders
-  setTimeout(() => {
-    const classId = r.students?.classes?.id;
-    if (classId) {
-      const classSelect = document.getElementById('result-class');
-      if (classSelect) classSelect.value = classId;
-      onResultClassChange();
-      const studentSelect = document.getElementById('result-student');
-      if (studentSelect) studentSelect.value = r.student_id;
+  // Initialize in a deterministic order: class, subject, then student list.
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const classId = r.students?.classes?.id;
+  const classSelect = document.getElementById('result-class');
+  const subjectSelect = document.getElementById('result-subject');
+  if (classId && classSelect) {
+    classSelect.value = String(classId);
+    updateAssessmentLabelsForClass(classId);
+    const section = myClasses.find(c => String(c.id) === String(classId))?.section || '';
+    if (subjectSelect) {
+      subjectSelect.innerHTML = renderSubjectOptionsForSection(section);
+      subjectSelect.value = String(r.subject_id);
     }
-    const subjectSelect = document.getElementById('result-subject');
-    if (subjectSelect) subjectSelect.value = r.subject_id;
-    const ca1Input = document.getElementById('result-ca1');
-    const ca2Input = document.getElementById('result-ca2');
-    const examInput = document.getElementById('result-exam');
-    if (ca1Input) ca1Input.value = r.ca1_score ?? '';
-    if (ca2Input) ca2Input.value = r.ca2_score ?? '';
-    if (examInput) examInput.value = r.exam_score ?? '';
-    document.getElementById('teacher-submit-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, 0);
+    resultEntrySelection = { classId: String(classId), subjectId: String(r.subject_id) };
+    await loadEligibleResultStudents();
+    const studentSelect = document.getElementById('result-student');
+    if (studentSelect) {
+      if (![...studentSelect.options].some(o => String(o.value) === String(r.student_id))) {
+        const student = myStudents.find(s => String(s.id) === String(r.student_id));
+        if (student) studentSelect.add(new Option(student.name, student.id));
+      }
+      studentSelect.value = String(r.student_id);
+    }
+  }
+  const ca1Input = document.getElementById('result-ca1');
+  const ca2Input = document.getElementById('result-ca2');
+  const examInput = document.getElementById('result-exam');
+  if (ca1Input) ca1Input.value = r.ca1_score ?? '';
+  if (ca2Input) ca2Input.value = r.ca2_score ?? '';
+  if (examInput) examInput.value = r.exam_score ?? '';
+  resultEntryExistingRecordId = r.id;
+  openTeacherEditSheet();
+  restoreTeacherEditScroll();
 }
 
 function cancelEditResult() {
+  closeTeacherEditSheet();
   editingResultId = null;
-  teacherActiveWorkspace = 'teacher-my-submissions';
+  resultEntryExistingRecordId = null;
+  teacherActiveWorkspace = teacherEditReturnState?.workspace || 'teacher-my-submissions';
   renderDashboard();
+  restoreTeacherEditScroll();
+  teacherEditReturnState = null;
 }
 
 async function submitResult() {
@@ -996,7 +1101,10 @@ async function submitResult() {
         session_id: activeSession.id, status: 'pending', submitted_by: currentUserId, ...payload,
       });
 
+  const saveButton = document.getElementById(editingResultId ? 'teacher-edit-save-button' : 'submit-result-button');
+  if (saveButton) { saveButton.disabled = true; saveButton.textContent = 'Saving…'; }
   const { error } = await query;
+  if (saveButton) { saveButton.disabled = false; saveButton.textContent = editingResultId ? 'Save Update' : 'Submit for approval'; }
 
   if (error) {
     errEl.textContent = error.code === '23505'
@@ -1027,6 +1135,11 @@ async function submitResult() {
     if (submitButton) { submitButton.disabled = true; submitButton.textContent = 'Submit for approval'; }
   }
   await refreshMyResults();
+  if (wasEditing) {
+    closeTeacherEditSheet();
+    restoreTeacherEditScroll();
+    teacherEditReturnState = null;
+  }
   if (!wasEditing) {
     resultEntrySelection = { classId: savedClassId, subjectId: savedSubjectId };
     // refreshMyResults re-renders the dashboard and restores the selection/context.
