@@ -120,6 +120,18 @@
       }
 
       const first = data[0];
+      // Load only the public branding fields for this valid verification token.
+      // The result RPC does not return school_id, and public visitors cannot directly
+      // SELECT the schools table under the current RLS policies. The narrow RPC reads
+      // the stamp URL saved in School Setup without opening table access.
+      let configuredStampUrl = '';
+      try {
+        const { data: brandingRows, error: brandingError } = await supabaseClient
+          .rpc('get_report_branding_by_token', { p_token: code });
+        if (!brandingError && brandingRows && brandingRows.length) {
+          configuredStampUrl = brandingRows[0].stamp_url || '';
+        }
+      } catch (_) { /* If branding is not configured yet, render the report without a stamp. */ }
       const rowsHtml = data.map((r) => `
         <tr>
           <td>${r.subject_name}</td>
@@ -224,7 +236,7 @@
             const signatureUrl = isPrimary
               ? (first.headteacher_signature_url || 'assets/head-teacher.png')
               : (first.principal_signature_url || 'assets/principal.png');
-            const stampUrl = first.school_stamp_url || first.stamp_url || ''; // Use only the configured stamp URL; never substitute a local image.
+            const stampUrl = configuredStampUrl; // Only use the URL saved in School Setup; no local-image fallback.
             const cacheBust = (url) => `${url}${String(url).includes('?') ? '&' : '?'}cb=${Date.now()}`;
             return `<div class="verification-authorities">
               <div class="verification-signature">

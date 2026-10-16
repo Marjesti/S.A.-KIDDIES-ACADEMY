@@ -12,6 +12,17 @@
   .verify-card .auth-card { padding: 28px 24px; }
   .report-wrap { max-width: 720px; width: 100%; margin: 20px auto 0; }
   .report-table-scroll { overflow-x: auto; }
+  .parent-verification-block { display:flex; flex-direction:column; align-items:center; gap:6px; margin:16px auto 8px; text-align:center; break-inside:avoid; }
+  .parent-verification-qr { display:flex; align-items:center; justify-content:center; background:#fff; padding:6px; min-width:132px; min-height:132px; border:1px solid #e2e8e5; border-radius:8px; }
+  .parent-verification-qr img,.parent-verification-qr canvas { display:block; width:132px!important; height:132px!important; }
+  .parent-verification-code { font-size:11px; overflow-wrap:anywhere; }
+  .parent-report-authorities { position:relative; display:flex; justify-content:space-between; align-items:flex-end; gap:16px; margin:20px 8px 8px; padding-top:12px; border-top:1px solid #d9e2df; min-height:76px; }
+  .parent-report-signature { display:flex; flex:1; min-width:0; flex-direction:column; align-items:center; text-align:center; font-size:11px; }
+  .parent-report-signature img { max-width:100%; max-height:52px; width:auto; height:auto; object-fit:contain; }
+  .parent-report-signature .signature-line { width:100%; max-width:190px; border-top:1px solid #344b47; margin-top:3px; }
+  .parent-report-stamp { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); z-index:2; pointer-events:none; }
+  .parent-report-stamp img { display:block; width:82px; height:82px; object-fit:contain; transform:rotate(-5deg); }
+  @media(max-width:480px) { .parent-report-stamp img { width:66px;height:66px; } }
   .download-pdf-btn { margin-top: 14px; }
 
   @media print {
@@ -71,6 +82,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="js/config.js"></script>
   <script>
     function showError(message) {
@@ -89,6 +101,46 @@
       const s = ['th', 'st', 'nd', 'rd'];
       const v = n % 100;
       return n + (s[(v - 20) % 10] || s[v] || s[0]);
+    }
+
+    function parentVerificationUrl(token) {
+      const basePath = window.location.pathname.replace(/[^/]*$/, '');
+      const url = new URL(`${basePath}verify.html`, window.location.origin);
+      url.searchParams.set('token', token);
+      return url.toString();
+    }
+
+    function renderParentQr(holderId, url) {
+      const holder = document.getElementById(holderId);
+      if (!holder) return;
+      holder.innerHTML = '';
+      if (!window.QRCode) { holder.textContent = 'QR code unavailable'; return; }
+      try { new QRCode(holder, { text: url, width: 132, height: 132, correctLevel: QRCode.CorrectLevel.M }); }
+      catch (e) { holder.textContent = 'QR code unavailable'; console.error('Parent result QR generation failed:', e); }
+    }
+
+    async function getParentSchoolSettings(first) {
+      let schoolId = first.school_id || null;
+      if (!schoolId && first.student_id) {
+        const { data: student } = await supabaseClient.from('students').select('school_id').eq('id', first.student_id).maybeSingle();
+        schoolId = student?.school_id || null;
+      }
+      if (!schoolId) return {};
+      const { data: school, error } = await supabaseClient.from('schools')
+        .select('id, stamp_url, principal_signature_url, headteacher_signature_url')
+        .eq('id', schoolId).maybeSingle();
+      if (error) { console.warn('Could not load school stamp/signature settings:', error.message); return {}; }
+      return school || {};
+    }
+
+    async function getParentVerificationToken(first) {
+      if (!first.student_id) return null;
+      let query = supabaseClient.from('report_verifications').select('token')
+        .eq('student_id', first.student_id);
+      if (first.session_id) query = query.eq('session_id', first.session_id);
+      const { data, error } = await query.limit(1).maybeSingle();
+      if (error) { console.warn('Could not load result verification token:', error.message); return null; }
+      return data?.token || null;
     }
 
     async function parentLogin() {
@@ -124,9 +176,12 @@
         byStudent[r.student_id].push(r);
       });
 
-      const cardsHtml = order.map((sid) => {
+      const cardsHtml = (await Promise.all(order.map(async (sid) => {
         const subjectRows = byStudent[sid];
         const first = subjectRows[0];
+        const schoolSettings = await getParentSchoolSettings(first);
+        const verificationToken = await getParentVerificationToken(first);
+        const verificationUrl = verificationToken ? parentVerificationUrl(verificationToken) : '';
         const rowsHtml = subjectRows.map((r) => `
           <tr>
             <td>${r.subject_name}</td>
@@ -222,13 +277,34 @@
             <p><strong>Headteacher/Principal's remarks:</strong> ${first.headteacher_remark || 'Not yet recorded.'}</p>
             <p><strong>Teacher's remark:</strong> ${first.teacher_remark || 'Not yet recorded.'}</p>
           </div>
+          ${(() => {
+            const classLabel = String(first.class_name || '').toLowerCase();
+            const isPrimary = classLabel.includes('primary') || classLabel.includes('nursery') || classLabel.includes('pre-nursery') || classLabel.includes('playgroup') || classLabel === 'nur';
+            const signatureLabel = isPrimary ? 'Headteacher' : 'Principal';
+            const signatureUrl = isPrimary ? schoolSettings.headteacher_signature_url : schoolSettings.principal_signature_url;
+            const cacheBust = (url) => `${url}${String(url).includes('?') ? '&' : '?'}cb=${Date.now()}`;
+            return `<div class="parent-report-authorities">
+              <div class="parent-report-signature">
+                ${signatureUrl ? `<img src="${cacheBust(signatureUrl)}" alt="${signatureLabel} signature" onerror="this.style.display='none'">` : ''}
+                <div class="signature-line"></div><strong>${signatureLabel}'s Signature</strong>
+              </div>
+              ${schoolSettings.stamp_url ? `<div class="parent-report-stamp"><img src="${cacheBust(schoolSettings.stamp_url)}" alt="School official stamp" onerror="this.style.display='none'"></div>` : ''}
+            </div>`;
+          })()}
+          ${verificationUrl ? `<div class="parent-verification-block"><div class="parent-verification-qr" id="parent-qr-${sid}"></div><div class="parent-verification-code"><strong>Scan to verify this result</strong><br>Verification ID: ${verificationToken}</div><a href="${verificationUrl}" target="_blank" rel="noopener">Open result verification page</a></div>` : `<p class="text-muted" style="text-align:center;">A verification QR code is not available for this result yet.</p>`}
         </div>`;
-      }).join('<div style="height:20px;"></div>');
+      }))).join('<div style="height:20px;"></div>');
 
       document.getElementById('result-output').innerHTML = `
         ${cardsHtml}
         <button class="btn-primary download-pdf-btn" onclick="window.print()">Download as PDF</button>
       `;
+      // Generate QR codes only after their holders have been added to the DOM.
+      for (const sid of order) {
+        const first = byStudent[sid][0];
+        const token = await getParentVerificationToken(first);
+        if (token) renderParentQr(`parent-qr-${sid}`, parentVerificationUrl(token));
+      }
     }
   </script>
 </body>

@@ -44,9 +44,9 @@ function renderSchoolSetupBody(school) {
         <input type="text" id="school-logo" value="${school.logo_url || ''}" placeholder="https://..." ${isAdmin ? '' : 'disabled'}>
       </div>
       <div class="field">
-        <label for="school-stamp-url">Official stamp image URL (optional)</label>
+        <label for="school-stamp-url">Official stamp image URL</label>
         <input type="url" id="school-stamp-url" value="${escapeSetupAttribute(school.stamp_url || '')}" placeholder="https://.../school-stamp.png" ${isAdmin ? '' : 'disabled'}>
-        <small class="text-muted">Paste a direct image URL (preferably a transparent PNG). The stamp will appear slightly tilted on printed report cards for a more natural stamped look. Leave blank to use the built-in school stamp.</small>
+        <small class="text-muted">Paste the direct image URL for the official stamp (preferably a transparent PNG). The verification page uses this saved URL and will not substitute a built-in stamp.</small>
         ${school.stamp_url ? `<div style="margin-top:10px;"><img src="${escapeSetupAttribute(school.stamp_url)}" alt="Stamp preview" style="width:86px;height:86px;object-fit:contain;transform:rotate(-6deg);opacity:.92;"></div>` : ''}
       </div>
       <div class="form-grid">
