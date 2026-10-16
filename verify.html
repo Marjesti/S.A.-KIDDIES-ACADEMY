@@ -13,15 +13,15 @@
   .report-wrap { max-width: 720px; width: 100%; margin: 20px auto 0; }
   .report-table-scroll { overflow-x: auto; }
   .download-pdf-btn { margin-top: 14px; }
-  .verification-authorities { position:relative; display:flex; align-items:flex-end; justify-content:space-between; gap:18px; margin:20px 8px 8px; padding-top:12px; border-top:1px solid #d9e2df; break-inside:avoid; page-break-inside:avoid; }
+  .verification-authorities { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:12px; margin:20px 8px 8px; padding-top:12px; border-top:1px solid #d9e2df; break-inside:avoid; page-break-inside:avoid; }
   .verification-signature { display:flex; flex-direction:column; align-items:center; justify-content:flex-end; flex:1; min-width:0; text-align:center; font-size:11px; color:#243b38; }
   .verification-signature img { display:block; max-width:100%; width:auto; height:auto; max-height:56px; object-fit:contain; }
   .verification-signature .signature-line { width:100%; max-width:190px; border-top:1px solid #344b47; margin-top:3px; }
   .verification-signature strong { margin-top:4px; }
   /* Center the official stamp across the signature area, with a subtle realistic tilt. */
-  .verification-stamp { position:absolute; left:50%; top:50%; z-index:2; display:flex; justify-content:center; align-items:center; width:92px; transform:translate(-50%,-50%); pointer-events:none; }
+  .verification-stamp { position:static; z-index:1; display:flex; justify-content:center; align-items:center; width:92px; margin:0 auto; transform:none; pointer-events:none; }
   .verification-stamp img { display:block; width:88px; height:88px; object-fit:contain; transform:rotate(-5deg); }
-  @media(max-width:480px) { .verification-authorities { gap:8px; margin-left:2px; margin-right:2px; } .verification-stamp { width:70px; } .verification-stamp img { width:68px; height:68px; } .verification-signature img { max-height:44px; } }
+  @media(max-width:480px) { .verification-authorities { gap:12px; margin-left:2px; margin-right:2px; } .verification-stamp { width:70px; } .verification-stamp img { width:68px; height:68px; } .verification-signature img { max-height:44px; } }
   @media print { .verification-authorities { margin-top:10px; } .verification-stamp img { width:68px; height:68px; } .verification-signature img { max-height:40px; } }
 
   @media print {
