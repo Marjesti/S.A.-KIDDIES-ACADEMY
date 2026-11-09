@@ -6,6 +6,7 @@ let currentClasses = [];
 let currentFilter = 'all';
 let currentResults = [];
 let editingResultId = null;
+let queueSubjectChoice = {}; // remembers which subject tab is open in each class group
 let ca1Max = 15;
 let ca2Max = 15;
 let examMax = 70;
@@ -89,19 +90,70 @@ async function loadResultsQueuePage() {
   await refreshResultsView();
 }
 
+// Supabase/PostgREST returns at most 1000 rows per request. The old code asked
+// for everything in one request, so on "All" any results beyond the first 1000
+// silently disappeared (while the Pending/Approved/Published filters, which
+// return fewer rows, looked fine). Load in pages until everything is fetched.
+const QUEUE_PAGE_SIZE = 1000;
+const QUEUE_SELECT = 'id, ca1_score, ca2_score, ca_score, exam_score, total_score, grade, status, subject_id, students ( id, name, classes ( id, name ) ), subjects ( name )';
+
+function normalizeStatus(status) {
+  const value = String(status ?? '').trim().toLowerCase();
+  if (value === 'published' || value === 'approved') return value;
+  return 'pending';
+}
+
+async function fetchAllQueueResults() {
+  const rows = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabaseClient
+      .from('results')
+      .select(QUEUE_SELECT)
+      .eq('school_id', currentSchoolId)
+      .eq('session_id', activeSession.id)
+      .order('id', { ascending: false })
+      .range(from, from + QUEUE_PAGE_SIZE - 1);
+    if (error) return { rows, error };
+    rows.push(...(data || []));
+    if (!data || data.length < QUEUE_PAGE_SIZE) break;
+    from += QUEUE_PAGE_SIZE;
+  }
+  return { rows, error: null };
+}
+
+// Filtering is done on the full list in the browser, so All is always the
+// union of Pending + Approved + Published.
+function visibleResults() {
+  return currentFilter === 'all'
+    ? currentResults
+    : currentResults.filter((r) => r.status === currentFilter);
+}
+
+function statusCounts() {
+  const counts = { all: currentResults.length, pending: 0, approved: 0, published: 0 };
+  currentResults.forEach((r) => { counts[r.status] += 1; });
+  return counts;
+}
+
 async function refreshResultsView() {
-  let query = supabaseClient
-    .from('results')
-    .select('id, ca1_score, ca2_score, ca_score, exam_score, total_score, grade, status, subject_id, students ( id, name, classes ( id, name ) ), subjects ( name )')
-    .eq('school_id', currentSchoolId)
-    .eq('session_id', activeSession.id)
-    .order('id', { ascending: false });
+  const { rows, error } = await fetchAllQueueResults();
+  if (error && !rows.length) {
+    document.getElementById('page-body').innerHTML = `
+      <p class="page-date">Results management</p>
+      <h1 class="page-title">Results queue</h1>
+      <div class="panel"><div class="empty-state">Could not load results: ${queueEscapeHtml(error.message)}</div></div>`;
+    return;
+  }
+  currentResults = rows.map((r) => ({ ...r, status: normalizeStatus(r.status) }));
 
-  if (currentFilter !== 'all') query = query.eq('status', currentFilter);
-
-  const { data: results } = await query;
-  currentResults = results || [];
-  renderResultsBody(currentResults);
+  if (document.getElementById('queue-groups')) {
+    renderQueueFilters();
+    renderQueueGroups();
+  } else {
+    renderResultsBody();
+  }
+  if (error) showFormError('Some results could not be loaded: ' + error.message);
 }
 
 function statusBadge(status) {
@@ -131,6 +183,9 @@ function classGroupHtml(className, resultsInClass, classKey = 'unassigned') {
   });
   const subjects = [...subjectMap.entries()].sort((a,b) => a[0].localeCompare(b[0]));
   const navId = `queue-subject-${String(classKey).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+  const chosenSubject = queueSubjectChoice[navId];
+  let activeIndex = subjects.findIndex(([name]) => name === chosenSubject);
+  if (activeIndex < 0) activeIndex = 0;
   const subjectHtml = subjects.map(([subject, records], index) => {
     const rows = records.sort((a,b) => (a.students?.name || '').localeCompare(b.students?.name || '')).map(r => `
       <tr><th scope="row" class="markbook-student">${queueEscapeHtml(r.students?.name || 'Unknown student')}</th>
@@ -138,9 +193,9 @@ function classGroupHtml(className, resultsInClass, classKey = 'unassigned') {
       <td><span class="markbook-total">${r.total_score ?? '—'} (${queueEscapeHtml(r.grade || '—')})</span></td>
       <td><span class="markbook-status">${statusBadge(r.status)}</span></td>
       <td><div class="markbook-actions">${actionButtons(r)}</div></td></tr>`).join('');
-    return `<section class="markbook-subject-panel" data-markbook-index="${index}" style="${index ? 'display:none;' : ''}"><h4 class="markbook-class-title">${queueEscapeHtml(subject)}</h4><div class="markbook-scroll" tabindex="0" aria-label="${queueEscapeHtml(className)} ${queueEscapeHtml(subject)} results"><table class="data-table markbook-table markbook-record-table"><thead><tr><th class="markbook-student markbook-head">Name</th><th>CA1</th><th>CA2</th><th>Exams</th><th>Total (Grade)</th><th>Status</th><th>Action</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+    return `<section class="markbook-subject-panel" data-markbook-index="${index}" data-subject="${queueEscapeHtml(subject)}" style="${index === activeIndex ? '' : 'display:none;'}"><h4 class="markbook-class-title">${queueEscapeHtml(subject)}</h4><div class="markbook-scroll" tabindex="0" aria-label="${queueEscapeHtml(className)} ${queueEscapeHtml(subject)} results"><table class="data-table markbook-table markbook-record-table"><thead><tr><th class="markbook-student markbook-head">Name</th><th>CA1</th><th>CA2</th><th>Exams</th><th>Total (Grade)</th><th>Status</th><th>Action</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
   }).join('');
-  return `<div class="panel markbook-subject-stack" id="${navId}"><p class="eyebrow">${resultsInClass.length} result${resultsInClass.length === 1 ? '' : 's'}</p><div class="markbook-group-heading"><h3 class="panel-title">${queueEscapeHtml(className)}</h3><div class="markbook-subject-nav"><button class="btn-outline" onclick="moveQueueSubject('${navId}',-1)" aria-label="Previous subject">‹ Previous</button><span class="markbook-subject-count">1 / ${subjects.length}</span><button class="btn-outline" onclick="moveQueueSubject('${navId}',1)" aria-label="Next subject">Next ›</button></div></div><div class="markbook-subject-panels">${subjectHtml}</div></div>`;
+  return `<div class="panel markbook-subject-stack" id="${navId}"><p class="eyebrow">${resultsInClass.length} result${resultsInClass.length === 1 ? '' : 's'}</p><div class="markbook-group-heading"><h3 class="panel-title">${queueEscapeHtml(className)}</h3><div class="markbook-subject-nav"><button class="btn-outline" onclick="moveQueueSubject('${navId}',-1)" aria-label="Previous subject">‹ Previous</button><span class="markbook-subject-count">${activeIndex + 1} / ${subjects.length}</span><button class="btn-outline" onclick="moveQueueSubject('${navId}',1)" aria-label="Next subject">Next ›</button></div></div><div class="markbook-subject-panels">${subjectHtml}</div></div>`;
 }
 
 function moveQueueSubject(groupId, direction) {
@@ -151,29 +206,52 @@ function moveQueueSubject(groupId, direction) {
   const current = Math.max(0, panels.findIndex(panel => panel.style.display !== 'none'));
   const next = (current + direction + panels.length) % panels.length;
   panels.forEach((panel, index) => { panel.style.display = index === next ? '' : 'none'; });
+  queueSubjectChoice[groupId] = panels[next].dataset.subject;
   const count = group.querySelector('.markbook-subject-count');
   if (count) count.textContent = `${next + 1} / ${panels.length}`;
 }
 
-function renderResultsBody(results) {
-  const studentOptions = currentStudents.map((s) => `<option value="${s.id}">${s.name}${s.classes?.name ? ' (' + s.classes.name + ')' : ''}</option>`).join('');
-  const subjectOptions = currentSubjects.map((s) => `<option value="${s.id}">${s.name}</option>`).join('');
+function queueFilterTabsHtml() {
+  const counts = statusCounts();
+  const tab = (key, label) => `
+    <button class="btn-outline" style="${currentFilter === key ? 'background: var(--navy); color:#fff; border-color: var(--navy);' : ''}"
+      onclick="setFilter('${key}')">${label} (${counts[key]})</button>`;
+  return `${tab('all', 'All')}${tab('pending', 'Pending')}${tab('approved', 'Approved')}${tab('published', 'Published')}`;
+}
 
-  // Group results by class, in class-name order; results with no class go in "Unassigned" at the end.
+function queueGroupsHtml() {
+  const results = visibleResults();
+  if (!results.length) {
+    const label = currentFilter === 'all' ? '' : ` ${currentFilter}`;
+    return `<div class="panel"><div class="empty-state">No${label} results here yet.</div></div>`;
+  }
+
+  // Group results by class, in class-name order. Anything whose student has no
+  // class, or a class that isn't in the school's class list, goes in "Unassigned"
+  // (previously those results vanished completely).
+  const knownClassIds = new Set(currentClasses.map((c) => String(c.id)));
   const groupsHtml = currentClasses.map((c) => {
-    const resultsInClass = results.filter((r) => r.students?.classes?.id === c.id);
+    const resultsInClass = results.filter((r) => String(r.students?.classes?.id) === String(c.id));
     return classGroupHtml(c.name, resultsInClass, c.id);
   }).join('');
 
-  const unassignedResults = results.filter((r) => !r.students?.classes?.id);
-  const unassignedHtml = classGroupHtml('Unassigned', unassignedResults, 'unassigned');
+  const unassignedResults = results.filter((r) => !knownClassIds.has(String(r.students?.classes?.id)));
+  return groupsHtml + classGroupHtml('Unassigned', unassignedResults, 'unassigned');
+}
 
-  const noDataHtml = !results.length
-    ? `<div class="panel"><div class="empty-state">No results here yet.</div></div>` : '';
+function renderQueueFilters() {
+  const el = document.getElementById('queue-filters');
+  if (el) el.innerHTML = queueFilterTabsHtml();
+}
 
-  const filterTab = (key, label) => `
-    <button class="btn-outline" style="${currentFilter === key ? 'background: var(--navy); color:#fff; border-color: var(--navy);' : ''}"
-      onclick="setFilter('${key}')">${label}</button>`;
+function renderQueueGroups() {
+  const el = document.getElementById('queue-groups');
+  if (el) el.innerHTML = queueGroupsHtml();
+}
+
+function renderResultsBody() {
+  const studentOptions = currentStudents.map((s) => `<option value="${s.id}">${s.name}${s.classes?.name ? ' (' + s.classes.name + ')' : ''}</option>`).join('');
+  const subjectOptions = currentSubjects.map((s) => `<option value="${s.id}">${s.name}</option>`).join('');
 
   document.getElementById('page-body').innerHTML = `
     <p class="page-date">${activeSession.year_label} &middot; ${activeSession.term}</p>
@@ -214,17 +292,10 @@ function renderResultsBody(results) {
 
       <div id="form-error" class="error-banner"></div>
 
-      <div class="panel-toolbar">
-        ${filterTab('all', 'All')}
-        ${filterTab('pending', 'Pending')}
-        ${filterTab('approved', 'Approved')}
-        ${filterTab('published', 'Published')}
-      </div>
+      <div class="panel-toolbar" id="queue-filters">${queueFilterTabsHtml()}</div>
     </div>
 
-    ${noDataHtml}
-    ${groupsHtml}
-    ${unassignedHtml}
+    <div id="queue-groups">${queueGroupsHtml()}</div>
   `;
 }
 
@@ -275,7 +346,7 @@ function startEditResult(id) {
   const r = currentResults.find((x) => x.id === id);
   if (!r) return;
   editingResultId = id;
-  renderResultsBody(currentResults);
+  renderResultsBody();
 
   setTimeout(() => {
     document.getElementById('result-student').value = r.students?.id ?? '';
@@ -291,18 +362,28 @@ function startEditResult(id) {
 
 function cancelEditResult() {
   editingResultId = null;
-  renderResultsBody(currentResults);
+  renderResultsBody();
 }
 
 function showFormError(message) {
   const el = document.getElementById('form-error');
+  if (!el) { alert(message); return; }
   el.textContent = message;
   el.classList.add('visible');
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function clearFormError() {
+  const el = document.getElementById('form-error');
+  if (!el) return;
+  el.textContent = '';
+  el.classList.remove('visible');
 }
 
 function setFilter(key) {
   currentFilter = key;
-  refreshResultsView();
+  renderQueueFilters();
+  renderQueueGroups();
 }
 
 async function submitNewResult() {
@@ -371,8 +452,21 @@ async function submitNewResult() {
 }
 
 async function setResultStatus(id, status) {
-  const { error } = await supabaseClient.from('results').update({ status }).eq('id', id);
+  clearFormError();
+  // .select() makes Supabase return the rows it actually changed. Without it, an
+  // update that is blocked by row-level security (or reverted by a trigger)
+  // returns no error, so the page said "Result approved" while nothing changed.
+  const { data: updated, error } = await supabaseClient.from('results').update({ status }).eq('id', id).select('id, status');
   if (error) { showFormError(error.message); return; }
+  if (!updated || !updated.length) {
+    showFormError('The status was not changed. The database refused the update (check your permissions / row-level security policy on the results table).');
+    return;
+  }
+  if (normalizeStatus(updated[0].status) !== status) {
+    showFormError(`The database kept this result as "${updated[0].status}" instead of "${status}". Check for a trigger or policy on the results table that resets status.`);
+    await refreshResultsView();
+    return;
+  }
 
   const { data: { session } } = await supabaseClient.auth.getSession();
   const { data: profile } = await supabaseClient.from('profiles').select('name').eq('id', session.user.id).single();
